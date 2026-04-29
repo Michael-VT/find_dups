@@ -1,0 +1,7 @@
+/target
+find_dups/
+treeDocs.txt
+*.log
+*.csv
+*.sh
+

@@ -1,0 +1,11 @@
+[package]
+name = "find_dups"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+walkdir = "2"
+sha2 = "0.10"
+csv = "1"
+chrono = "0.4"
+
