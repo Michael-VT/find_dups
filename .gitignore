@@ -1,6 +1,4 @@
-/target
-find_dups/
-treeDocs.txt
+find_dups_rust/target
 *.log
 *.csv
 *.sh
