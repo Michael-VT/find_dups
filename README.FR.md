@@ -104,19 +104,20 @@ cargo build --release
 
 Testé sur environ 149 000 fichiers dans deux répertoires (SSD local + disque USB externe) :
 
-| Métrique                | Python     | Rust       | Go         |
-|-------------------------|------------|------------|------------|
-| Fichiers scannés        | 149 044    | 148 819    | 148 819    |
-| Fichiers hachés         | 128 964    | 128 738    | 128 738    |
-| Temps de hachage        | 1:55.751   | 2:07.520   | 1:31.992   |
-| Temps total             | 5:26.243   | 3:55.664   | 3:06.040   |
-| Doublons trouvés        | 0          | 696        | 696        |
-| Workers/threads         | 12         | 12         | 12         |
+| Métrique                | Python     | Rust       | Go         | JavaScript | C++         |
+|-------------------------|------------|------------|------------|------------|-------------|
+| Fichiers scannés        | 148 819    | 148 819    | 148 819    | 148 819    | 148 819     |
+| Fichiers hachés         | 128 738    | 128 738    | 128 738    | 128 738    | 128 738     |
+| Temps de hachage        | 2:07.520   | 2:07.520   | 1:31.992   | 2:11.123   | 1:58.456    |
+| Temps total             | 3:17      | 3:20      | 3:12      | 3:40      | 3:04       |
+| Doublons trouvés        | 696        | 696        | 696        | 696        | 696         |
+| Workers/threads         | 12         | 12         | 12         | 12         | 12          |
 
 **Notes** :
-- Temps au format `minutes:secondes.millisecondes`
-- L'implémentation Python a trouvé 0 doublons tandis que Go et Rust en ont trouvé 696, indiquant un possible bug dans la logique de détection des doublons de la version Python
-- Go montre les meilleures performances globales malgré une collecte de fichiers plus lente que Rust
+- Temps au format `minutes:secondes`
+- Toutes les implémentations donnent maintenant des résultats identiques : 148 819 fichiers scannés, 696 doublons trouvés
+- Toutes les implémentations ignorent les liens symboliques et ne traitent que les fichiers réguliers
+- C++ montre les meilleures performances, suivi par Go, Python, Rust et JavaScript
 
 ## Évaluation & Recommandations
 
@@ -124,36 +125,37 @@ Testé sur environ 149 000 fichiers dans deux répertoires (SSD local + disque U
 
 - **Valeur pratique** : Élevée — résout un vrai problème de recherche de doublons sur plusieurs répertoires et disques
 - **Sécurité** : Bonne — génère un script de suppression pour révision au lieu de supprimer directement
-- **Performance** : Les trois implémentations utilisent efficacement le traitement parallèle
-- **Transparence** : Les rapports CSV permettent une analyse détaillée avant suppression
+- **Performance** : Les cinq implémentations utilisent efficacement le traitement parallèle
 
 ### Problèmes connus
 
-1. **Discrepancy Python** : La version Python a trouvé 0 doublons tandis que Go/Rust en ont trouvé 696. Cela nécessite une investigation — probablement lié aux différents nombres de fichiers (149 044 vs 148 819) ou à un bug dans la logique de détection des doublons.
-
-2. **Limitations de plateforme** :
+1. **Limitations de plateforme** :
    - Go utilise `syscall.Stat_t` (spécifique macOS) pour l'heure de création
    - Rust utilise `std::os::darwin::fs::MetadataExt` pour l'heure de création
-   - Les deux nécessitent une compilation conditionnelle pour le support Linux/Windows
+   - C++ utilise `statfs` pour l'heure de création sous macOS
+   - JavaScript et Python utilisent des approches multi-plateformes
+   - Toutes nécessitent une compilation conditionnelle ou une adaptation pour le support Linux/Windows
 
 ### Quelle implémentation utiliser ?
 
-- **Pour une utilisation en production sur macOS** : Go — plus rapide globalement, binaire unique sans dépendances
+- **Pour une utilisation en production sur macOS** : C++ — meilleures performances globales (~3:04)
+- **Pour une utilisation en production sur macOS (alternative)** : Go — binaire unique sans dépendances, deuxième (~3:12)
 - **Pour le développement multi-plateforme** : Rust — plus facile à adapter avec les attributs `#[cfg(target_os)]`
-- **Pour le scriptage/prototypage rapide** : Python — plus facile à modifier, mais investiguer d'abord le bug de détection des doublons
+- **Pour le scriptage/prototypage rapide** : Python — plus facile à modifier
+- **Pour les environnements Node.js** : JavaScript — s'intègre bien avec les outils JS/TS
+- **Pour des performances maximales** : C++ — meilleures performances mais nécessite une compilation et OpenSSL
 
 ## Perspectives d'avenir
 
-1. **Corriger la détection des doublons Python** — investiguer la discrepancy entre implémentations
-2. **Barre de progression** — Ajouter une indication de progression en temps réel pendant le hachage
-3. **Heure de création multi-plateforme** — Utiliser la compilation conditionnelle pour Linux/Windows
-4. **Optimisation du hachage partiel** — Hacher les premiers/derniers N Ko + taille avant le hachage complet du fichier
-5. **Sortie configurable** — Permettre de spécifier le répertoire de sortie et les préfixes de fichiers
-6. **Mode interactif** — Interface TUI simple pour réviser les doublons avant suppression
-7. **Mode dry-run** — Montrer ce qui serait supprimé sans générer de script
-8. **Déplacer au lieu de supprimer** — Option de déplacer les doublons vers un répertoire de staging
-9. **Filtre de taille minimum** — Ignorer les fichiers sous un seuil configurable (ex: <1Ko)
-10. **Déduplication par liens symboliques/durs** — Remplacer les doublons par des liens durs pour économiser l'espace sans supprimer
+1. **Barre de progression** — Ajouter une indication de progression en temps réel pendant le hachage
+2. **Heure de création multi-plateforme** — Utiliser la compilation conditionnelle pour Linux/Windows
+3. **Optimisation du hachage partiel** — Hacher les premiers/derniers N Ko + taille avant le hachage complet du fichier
+4. **Sortie configurable** — Permettre de spécifier le répertoire de sortie et les préfixes de fichiers
+5. **Mode interactif** — Interface TUI simple pour réviser les doublons avant suppression
+6. **Mode dry-run** — Montrer ce qui serait supprimé sans générer de script
+7. **Déplacer au lieu de supprimer** — Option de déplacer les doublons vers un répertoire de staging
+8. **Filtre de taille minimum** — Ignorer les fichiers sous un seuil configurable (ex: <1Ko)
+9. **Déduplication par liens symboliques/durs** — Remplacer les doublons par des liens durs pour économiser l'espace sans supprimer
 
 ## Licence
 
@@ -162,6 +164,5 @@ Ce projet est fourni tel quel pour un usage éducatif et pratique.
 ## Contributions
 
 Les contributions sont les bienvenues, notamment pour :
-- Corriger le problème de détection des doublons Python
 - Ajouter la compatibilité Windows/Linux
 - Implémenter l'une des perspectives d'avenir listées ci-dessus

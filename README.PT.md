@@ -1,6 +1,6 @@
 # find_dups: Buscador de Duplicados Multi-idioma
 
-Um buscador de duplicatos abrangente implementado em Go, Python e Rust com algoritmos idênticos para comparação de performance e uso em produção.
+Um buscador de duplicatos abrangente implementado em Go, Python, Rust, JavaScript e C++ com algoritmos idênticos para comparação de performance e uso em produção.
 
 ## Visão Geral
 
@@ -8,7 +8,7 @@ Um buscador de duplicatos abrangente implementado em Go, Python e Rust com algor
 
 ### Recursos Principais
 
-- **Implementação multi-idioma**: versões Go, Python e Rust para comparação de performance
+- **Implementação multi-idioma**: versões Go, Python, Rust, JavaScript e C++ para comparação de performance
 - **Hashing paralelo**: Utiliza todos os núcleos da CPU para detecção rápida de duplicatas
 - **Segurança**: Gera um script de exclusão em vez de excluir arquivos diretamente
 - **Relatórios detalhados**: Exportações CSV com metadados de arquivos e timestamps
@@ -16,7 +16,7 @@ Um buscador de duplicatos abrangente implementado em Go, Python e Rust com algor
 
 ## Algoritmo
 
-Todas as três implementações seguem o mesmo algoritmo:
+Todas as cinco implementações seguem o mesmo algoritmo:
 
 1. **Coletar arquivos** — Caminhada recursiva através de todos os diretórios especificados, registrando caminho, tamanho, hora de criação e modificação
 2. **Agrupar por tamanho** — Apenas arquivos compartilhando um tamanho com pelo menos um outro arquivo prosseguem para o hashing (otimização)
@@ -24,6 +24,8 @@ Todas as três implementações seguem o mesmo algoritmo:
    - Go: goroutines com pool de workers baseado em canais
    - Python: `multiprocessing.Pool`
    - Rust: iterador paralelo `rayon`
+   - JavaScript: `worker_threads` com pool de workers
+   - C++: `std::thread` com pool de threads
 4. **Identificar duplicatas** — Agrupa arquivos por hash dentro de grupos de tamanho; todos os arquivos em um grupo de hash com >1 membro são duplicatas
 5. **Gerar saídas**:
    - `duplicates_<lang>.csv` — Todos os grupos de arquivos duplicados com metadados completos

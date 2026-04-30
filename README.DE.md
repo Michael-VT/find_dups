@@ -1,6 +1,6 @@
 # find_dups: Mehrsprachiger Duplikat-Finder
 
-Ein umfassender Duplikat-Finder, implementiert in Go, Python und Rust mit identischen Algorithmen für Leistungsvergleich und Produktionseinsatz.
+Ein umfassender Duplikat-Finder, implementiert in Go, Python, Rust, JavaScript und C++ mit identischen Algorithmen für Leistungsvergleich und Produktionseinsatz.
 
 ## Überblick
 
@@ -8,7 +8,7 @@ Ein umfassender Duplikat-Finder, implementiert in Go, Python und Rust mit identi
 
 ### Hauptfunktionen
 
-- **Mehrsprachige Implementierung**: Go-, Python- und Rust-Versionen für Leistungsvergleich
+- **Mehrsprachige Implementierung**: Go-, Python-, Rust-, JavaScript- und C++-Versionen für Leistungsvergleich
 - **Paralleles Hashing**: Nutzt alle CPU-Kerne für schnelle Duplikaterkennung
 - **Sicherheit**: Erstellt ein Löskript anstatt Dateien direkt zu löschen
 - **Detaillierte Berichte**: CSV-Exporte mit Dateimetadaten und Zeitstempeln
@@ -16,7 +16,7 @@ Ein umfassender Duplikat-Finder, implementiert in Go, Python und Rust mit identi
 
 ## Algorithmus
 
-Alle drei Implementierungen folgen demselben Algorithmus:
+Alle fünf Implementierungen folgen demselben Algorithmus:
 
 1. **Dateien sammeln** — Rekursiver Durchlauf aller angegebenen Verzeichnisse, Aufzeichnung von Pfad, Größe, Erstellungs- und Änderungszeit
 2. **Nach Größe gruppieren** — Nur Dateien, die ihre Größe mit mindestens einer anderen Datei teilen, werden zum Hashing fortgesetzt (Optimierung)
@@ -24,6 +24,8 @@ Alle drei Implementierungen folgen demselben Algorithmus:
    - Go: Goroutines mit Channel-basiertem Worker-Pool
    - Python: `multiprocessing.Pool`
    - Rust: `rayon` paralleler Iterator
+   - JavaScript: `worker_threads` mit Worker-Pool
+   - C++: `std::thread` mit Thread-Pool
 4. **Duplikate identifizieren** — Gruppierung von Dateien nach Hash innerhalb von Gruppengrößen; alle Dateien in einer Hash-Gruppe mit >1 Element sind Duplikate
 5. **Ausgaben generieren**:
    - `duplicates_<lang>.csv` — Alle Duplikatgruppen mit vollen Metadaten
@@ -73,7 +75,7 @@ go build -o find_dups_go find_dups_go.go
 **Ausführen**:
 ```bash
 cd find_dups_pthon
-python3 find_dups_python.py /pfad/zum/scan1 /pfad/zum/scan2 ...
+python3 find_dups.py /pfad/zum/scan1 /pfad/zum/scan2 ...
 ```
 
 **Abhängigkeiten**: Nur Standardbibliothek
@@ -90,7 +92,7 @@ cargo build --release
 
 **Ausführen**:
 ```bash
-./target/release/find_dups_rust /pfad/zum/scan1 /pfad/zum/scan2 ...
+./target/release/find_dups /pfad/zum/scan1 /pfad/zum/scan2 ...
 ```
 
 **Abhängigkeiten** (siehe `Cargo.toml`):
@@ -100,6 +102,37 @@ cargo build --release
 - `chrono` 0.4 — Zeitformatierung
 - `rayon` 1.12 — Parallelverarbeitung
 
+
+### JavaScript-Implementierung (Node.js)
+
+**Voraussetzungen**: Node.js 16+ (mit worker_threads Unterstützung)
+
+**Ausführen**:
+```bash
+cd find_dups_js
+node find_dups.js /pfad/zum/scan1 /pfad/zum/scan2 ...
+```
+
+**Abhängigkeiten**: Nur Standardbibliothek (`crypto`, `fs`, `worker_threads`)
+
+### C++-Implementierung
+
+**Voraussetzungen**: g++ mit C++17 Unterstützung, OpenSSL (libcrypto)
+
+**Build**:
+```bash
+cd find_dups_cp
+g++ -std=c++17 -O3 -pthread -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib find_dups.cpp -o find_dups_cpp -lcrypto -Wno-deprecated-declarations
+```
+
+**Ausführen**:
+```bash
+./find_dups_cpp /pfad/zum/scan1 /pfad/zum/scan2 ...
+```
+
+**Abhängigkeiten**:
+- OpenSSL (libcrypto) — SHA-256-Hashing
+- Standardbibliothek für Dateisystem und Threads
 ## Benchmark-Ergebnisse
 
 Getestet mit ca. 149.000 Dateien in zwei Verzeichnissen (lokale SSD + externes USB-Laufwerk):

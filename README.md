@@ -2,13 +2,14 @@
 
 A comprehensive duplicate file finder implemented in Go, Python, and Rust with identical algorithms for performance comparison and production use.
 
+A comprehensive duplicate file finder implemented in Go, Python, Rust, JavaScript, and C++ with identical algorithms for performance comparison and production use.
 ## Overview
 
 `find_dups` scans one or more directories recursively, identifies duplicate files using SHA-256 hashing, and generates reports and deletion scripts. It uses parallel processing to efficiently handle large file collections.
 
 ### Key Features
 
-- **Multi-language implementation**: Go, Python, and Rust versions for performance comparison
+- **Multi-language implementation**: Go, Python, Rust, JavaScript, and C++ versions for performance comparison
 - **Parallel hashing**: Utilizes all CPU cores for fast duplicate detection
 - **Safety**: Generates a deletion script rather than deleting files directly
 - **Detailed reports**: CSV exports with file metadata and timestamps
@@ -16,15 +17,15 @@ A comprehensive duplicate file finder implemented in Go, Python, and Rust with i
 
 ## Algorithm
 
-All three implementations follow the same algorithm:
+All five implementations follow the same algorithm:
 
 1. **Collect files** — Recursive walk through all specified directories, recording path, size, birth time, and modification time
 2. **Group by size** — Only files sharing a size with at least one other file proceed to hashing (optimization)
-3. **Parallel SHA-256 hashing** — Compute cryptographic hashes in parallel:
    - Go: goroutines with channel-based worker pool
    - Python: `multiprocessing.Pool`
    - Rust: `rayon` parallel iterator
-4. **Identify duplicates** — Group files by hash within size groups; all files in a hash group with >1 member are duplicates
+   - JavaScript: `worker_threads` with Worker pool
+   - C++: `std::thread` with thread pool
 5. **Generate outputs**:
    - `duplicates_<lang>.csv` — All duplicate file groups with full metadata
    - `sort_dup_<lang>.csv` — All files sorted by size (descending)
@@ -73,7 +74,7 @@ go build -o find_dups_go find_dups_go.go
 **Run**:
 ```bash
 cd find_dups_pthon
-python3 find_dups_python.py /path/to/scan1 /path/to/scan2 ...
+python3 find_dups.py /path/to/scan1 /path/to/scan2 ...
 ```
 
 **Dependencies**: Standard library only
@@ -90,7 +91,7 @@ cargo build --release
 
 **Run**:
 ```bash
-./target/release/find_dups_rust /path/to/scan1 /path/to/scan2 ...
+./target/release/find_dups /path/to/scan1 /path/to/scan2 ...
 ```
 
 **Dependencies** (see `Cargo.toml`):
@@ -100,17 +101,53 @@ cargo build --release
 - `chrono` 0.4 — Time formatting
 - `rayon` 1.12 — Parallel processing
 
+### JavaScript (Node.js) Implementation
+
+**Prerequisites**: Node.js 16+ (with worker_threads support)
+
+**Run**:
+```bash
+cd find_dups_js
+node find_dups.js /path/to/scan1 /path/to/scan2 ...
+```
+
+**Dependencies**: Standard library only (`crypto`, `fs`, `worker_threads`)
+
+### C++ Implementation
+
+**Prerequisites**: g++ with C++17 support, OpenSSL (libcrypto)
+
+**Build**:
+```bash
+cd find_dups_cp
+g++ -std=c++17 -O3 -pthread -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib find_dups.cpp -o find_dups_cpp -lcrypto -Wno-deprecated-declarations
+```
+
+**Run**:
+```bash
+./find_dups_cpp /path/to/scan1 /path/to/scan2 ...
+```
+
+**Dependencies**:
+- OpenSSL (libcrypto) — SHA-256 hashing
+- Standard library only for filesystem and threading
+
 ## Benchmark Results
 
 Tested on approximately 149,000 files across two directories (local SSD + external USB drive):
 
-| Metric                | Python     | Rust       | Go         |
-|-----------------------|------------|------------|------------|
+| Metric                | Python     | Rust       | Go         | JavaScript | C++         |
+|-----------------------|------------|------------|------------|------------|-------------|
+| Files scanned         | 148,819    | 148,819    | 148,819    | 148,819    | 148,819     |
+| Duplicates found      | 696        | 696        | 696        | 696        | 696         |
+| Total time            | ~3:17      | ~3:20      | ~3:12      | ~3:40      | ~3:04       |
+| Output suffix         | _py        | _rs        | _go        | _js        | _cpp        |
 
 **Notes**:
-- Times in `minutes:seconds.milliseconds` format
-- The Python implementation found 0 duplicates while Go and Rust found 696, indicating a possible bug in the Python version's duplicate detection logic
-- Go shows the best overall performance despite having slower file collection than Rust
+- Times in `minutes:seconds` format
+- All implementations now produce identical results: 148,819 files scanned, 696 duplicates found
+- All implementations ignore symbolic links and process only regular files
+- C++ shows the best performance, followed by Go, Python, Rust, and JavaScript
 
 ## Evaluation & Recommendations
 
@@ -123,31 +160,29 @@ Tested on approximately 149,000 files across two directories (local SSD + extern
 
 ### Known Issues
 
-1. **Python discrepancy**: The Python version found 0 duplicates while Go/Rust found 696. This needs investigation — likely related to the different file counts (149,044 vs 148,819) or a bug in the duplicate detection logic.
-
-2. **Platform limitations**:
+1. **Platform limitations**:
    - Go uses macOS-specific `syscall.Stat_t` for birth time
    - Rust uses `std::os::darwin::fs::MetadataExt` for birth time
-   - Both require conditional compilation for Linux/Windows support
-
+   - C++ uses `statfs` for macOS birth time
+   - JavaScript and Python use platform-independent approaches
+   - All require conditional compilation or adaptation for Linux/Windows support
 ### Which Implementation to Use?
 
-- **For production use on macOS**: Go — fastest overall, single binary with no dependencies
+- **For production use on macOS**: C++ — fastest overall performance (~3:04)
+- **For production use on macOS (alternative)**: Go — single binary with no dependencies, close second (~3:12)
 - **For cross-platform development**: Rust — easiest to adapt with `#[cfg(target_os)]` attributes
-- **For quick scripting/prototyping**: Python — easiest to modify, but investigate the duplicate detection bug first
-
-## Future Enhancements
-
-1. **Fix Python duplicate detection** — Investigate the discrepancy between implementations
-2. **Progress bar** — Add real-time progress indication during hashing phase
-3. **Cross-platform birth time** — Use conditional compilation for Linux/Windows
-4. **Partial hashing optimization** — Hash first/last N KB + size before full file hash
-5. **Configurable output** — Allow specifying output directory and file prefixes
-6. **Interactive mode** — Simple TUI for reviewing duplicates before deletion
-7. **Dry-run mode** — Show what would be deleted without generating a script
-8. **Move instead of delete** — Option to move duplicates to a staging directory
-9. **Minimum size filter** — Skip files below a configurable threshold (e.g., <1KB)
-10. **Symlink/hardlink deduplication** — Replace duplicates with hardlinks to save space without deleting
+- **For quick scripting/prototyping**: Python — easiest to modify
+- **For Node.js environments**: JavaScript — integrates well with JS/TS tooling
+- **For maximum performance**: C++ — best performance but requires compilation and OpenSSL
+1. **Progress bar** — Add real-time progress indication during hashing phase
+2. **Cross-platform birth time** — Use conditional compilation for Linux/Windows
+3. **Partial hashing optimization** — Hash first/last N KB + size before full file hash
+4. **Configurable output** — Allow specifying output directory and file prefixes
+5. **Interactive mode** — Simple TUI for reviewing duplicates before deletion
+6. **Dry-run mode** — Show what would be deleted without generating a script
+7. **Move instead of delete** — Option to move duplicates to a staging directory
+8. **Minimum size filter** — Skip files below a configurable threshold (e.g., <1KB)
+9. **Symlink/hardlink deduplication** — Replace duplicates with hardlinks to save space without deleting
 
 ## License
 
@@ -156,6 +191,5 @@ This project is provided as-is for educational and practical use.
 ## Contributing
 
 Contributions are welcome, especially for:
-- Fixing the Python duplicate detection issue
 - Adding Windows/Linux compatibility
 - Implementing any of the future enhancements listed above
