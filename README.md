@@ -106,12 +106,6 @@ Tested on approximately 149,000 files across two directories (local SSD + extern
 
 | Metric                | Python     | Rust       | Go         |
 |-----------------------|------------|------------|------------|
-| Files scanned         | 149,044    | 148,819    | 148,819    |
-| Files hashed          | 128,964    | 128,738    | 128,738    |
-| Hashing time          | 1:55.751   | 2:07.520   | 1:31.992   |
-| Total time            | 5:26.243   | 3:55.664   | 3:06.040   |
-| Duplicates found      | 0          | 696        | 696        |
-| Workers/threads       | 12         | 12         | 12         |
 
 **Notes**:
 - Times in `minutes:seconds.milliseconds` format

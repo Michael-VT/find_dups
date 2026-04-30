@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
 use std::io::{BufReader, Read, Write};
+use std::os::darwin::fs::MetadataExt;   // macOS: birth time
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use chrono::{DateTime, Local};
-use std::os::darwin::fs::MetadataExt;
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -19,28 +19,36 @@ struct FileInfo {
     hash: String,
 }
 
+fn is_regular_file(metadata: &Metadata) -> bool {
+    metadata.is_file() && !metadata.is_symlink()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Использование: find_dups_rust <директория1> [директория2 ...]");
+        eprintln!("Использование: find_dups <директория1> [<директория2> ...]");
         std::process::exit(1);
     }
     let roots = &args[1..];
 
     let start_total = std::time::Instant::now();
 
-    // ---------- 1. Сбор всех файлов ----------
+    // ----- 1. Сбор обычных файлов -----
     let mut all_files = Vec::new();
-    let mut scanned = 0;
     let mut next_id = 1;
+    let mut scanned = 0;
 
     for root in roots {
-        for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(root)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             let metadata = match entry.metadata() {
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            if !metadata.is_file() {
+            if !is_regular_file(&metadata) {
                 continue;
             }
             scanned += 1;
@@ -66,124 +74,144 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Группировка по размеру (используем ссылку, чтобы не перемещать all_files)
+    // ----- 2. Группировка по размеру -----
     let mut by_size: HashMap<u64, Vec<FileInfo>> = HashMap::new();
     for f in &all_files {
         by_size.entry(f.size).or_default().push(f.clone());
     }
 
-    // Собираем файлы для хеширования (те, размер которых встречается более одного раза)
+    // ----- 3. Параллельное хеширование -----
     let mut files_to_hash = Vec::new();
-    for files in by_size.values() {
-        if files.len() > 1 {
-            files_to_hash.extend(files.iter().cloned());
+    for group in by_size.values() {
+        if group.len() > 1 {
+            files_to_hash.extend(group.iter().cloned());
         }
     }
     let total_to_hash = files_to_hash.len();
-
-    // ---------- 2. Параллельное вычисление хешей (rayon) ----------
     if total_to_hash > 0 {
-        println!("Параллельное хеширование {} файлов (потоков: {})...", total_to_hash, rayon::current_num_threads());
+        eprintln!(
+            "Параллельное хеширование {} файлов (потоков: {})...",
+            total_to_hash,
+            rayon::current_num_threads()
+        );
         let start_hash = std::time::Instant::now();
 
         files_to_hash.par_iter_mut().for_each(|f| {
             if let Ok(hash) = compute_sha256(&f.path) {
                 f.hash = hash;
-            } else {
-                eprintln!("Ошибка при чтении {:?}", f.path);
             }
         });
 
-        println!("Хеширование завершено за {:?}", start_hash.elapsed());
-    }
+        eprintln!("Хеширование завершено за {:?}", start_hash.elapsed());
 
-    // Обновляем хеши в by_size (используем map для быстрого доступа)
-    let mut hash_map = HashMap::new();
-    for f in files_to_hash {
-        hash_map.insert(f.path.clone(), f.hash.clone());
-    }
-    for (_, files) in by_size.iter_mut() {
-        for f in files.iter_mut() {
+        // Обновляем хеши в by_size и all_files
+        let mut hash_map = HashMap::new();
+        for f in files_to_hash {
+            hash_map.insert(f.path.clone(), f.hash.clone());
+        }
+        for (_, group) in by_size.iter_mut() {
+            for f in group.iter_mut() {
+                if let Some(hash) = hash_map.get(&f.path) {
+                    f.hash = hash.clone();
+                }
+            }
+        }
+        for f in &mut all_files {
             if let Some(hash) = hash_map.get(&f.path) {
                 f.hash = hash.clone();
             }
         }
     }
 
-    // ---------- 3. CSV для дубликатов (duplicates_rs.csv) ----------
-    let mut csv_writer = csv::Writer::from_path("duplicates_rs.csv")?;
-    csv_writer.write_record(&["FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime"])?;
-
-    let mut sh_file = File::create("duprm_rs.sh")?;
-    writeln!(sh_file, "#!/bin/bash\n# Сгенерировано find_dups_rs\nset -e\n")?;
-
+    // ----- 4. Формирование дубликатов -----
+    let mut csv_dups = Vec::new();
+    let mut bash_lines = vec![
+        "#!/bin/bash".to_string(),
+        "# Generated by find_dups".to_string(),
+        "set -e".to_string(),
+        "".to_string(),
+    ];
     let mut duplicates_count = 0;
 
-    for (size, files) in by_size {
-        if files.len() < 2 {
+    for (size, group) in by_size {
+        if group.len() < 2 {
             continue;
         }
         let mut hash_groups: HashMap<String, Vec<&FileInfo>> = HashMap::new();
-        for f in files.iter() {
-            hash_groups.entry(f.hash.clone()).or_default().push(f);
+        for f in group.iter() {
+            if !f.hash.is_empty() {
+                hash_groups.entry(f.hash.clone()).or_default().push(f);
+            }
         }
-        for (hash, mut group) in hash_groups {
-            if group.len() < 2 {
+        for (hash, mut same) in hash_groups {
+            if same.len() < 2 {
                 continue;
             }
-            group.sort_by_key(|f| f.id);
-            for dup in &group {
-                let birth_str = DateTime::<Local>::from(dup.created).to_rfc3339();
-                let mod_str = DateTime::<Local>::from(dup.modified).to_rfc3339();
-                csv_writer.write_record(&[
-                    dup.id.to_string(),
-                    dup.path.to_string_lossy().to_string(),
+            same.sort_by_key(|f| f.id);
+            for f in &same {
+                let birth = DateTime::<Local>::from(f.created).to_rfc3339();
+                let modified = DateTime::<Local>::from(f.modified).to_rfc3339();
+                csv_dups.push(vec![
+                    f.id.to_string(),
+                    f.path.to_string_lossy().to_string(),
                     size.to_string(),
                     hash.clone(),
-                    birth_str,
-                    mod_str,
-                ])?;
+                    birth,
+                    modified,
+                ]);
             }
-            for (idx, dup) in group.iter().enumerate() {
-                if idx == 0 {
-                    continue;
-                }
+            for f in same.iter().skip(1) {
                 duplicates_count += 1;
-                writeln!(sh_file, "rm -- {:?}", dup.path)?;
+                let escaped = f.path.to_string_lossy().replace('\'', "'\\''");
+                bash_lines.push(format!("rm -- '{}'", escaped));
             }
         }
     }
+    bash_lines.push("".to_string());
+    bash_lines.push("echo \"Deletion complete.\"".to_string());
+
+    // Запись CSV и sh
+    let mut csv_writer = csv::Writer::from_path("duplicates_rs.csv")?;
+    csv_writer.write_record(&[
+        "FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime",
+    ])?;
+    for row in csv_dups {
+        csv_writer.write_record(&row)?;
+    }
     csv_writer.flush()?;
-    writeln!(sh_file, "\necho \"Удаление дубликатов завершено.\"")?;
+
+    let mut sh_file = File::create("duprm_rs.sh")?;
+    for line in bash_lines {
+        writeln!(sh_file, "{}", line)?;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = sh_file.metadata()?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions("duprm_rs.sh", perms)?;
+        let _ = fs::set_permissions("duprm_rs.sh", fs::Permissions::from_mode(0o755));
     }
 
-    // ---------- 4. Сортированный CSV всех файлов (sort_dup_rs.csv) ----------
-    let mut sorted_files = all_files.clone();
-    sorted_files.sort_by(|a, b| b.size.cmp(&a.size)); // по убыванию размера
-
+    // ----- 5. Сортированный CSV -----
+    let mut sorted = all_files.clone();
+    sorted.sort_by(|a, b| b.size.cmp(&a.size));
     let mut sort_writer = csv::Writer::from_path("sort_dup_rs.csv")?;
-    sort_writer.write_record(&["FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime"])?;
-    for f in sorted_files {
-        let birth_str = DateTime::<Local>::from(f.created).to_rfc3339();
-        let mod_str = DateTime::<Local>::from(f.modified).to_rfc3339();
+    sort_writer.write_record(&[
+        "FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime",
+    ])?;
+    for f in sorted {
+        let birth = DateTime::<Local>::from(f.created).to_rfc3339();
+        let modified = DateTime::<Local>::from(f.modified).to_rfc3339();
         sort_writer.write_record(&[
             f.id.to_string(),
             f.path.to_string_lossy().to_string(),
             f.size.to_string(),
             f.hash,
-            birth_str,
-            mod_str,
+            birth,
+            modified,
         ])?;
     }
     sort_writer.flush()?;
 
-    // ---------- 5. Вывод статистики ----------
+    // ----- 6. Статистика -----
     let elapsed = start_total.elapsed();
     println!("\nПросмотрено файлов: {}", scanned);
     println!("Найдено дубликатов (файлов для удаления): {}", duplicates_count);
@@ -200,16 +228,15 @@ fn compute_sha256(path: &std::path::Path) -> Result<String, Box<dyn std::error::
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
-    let mut buffer = [0; 16384];
+    let mut buf = [0; 16384];
     loop {
-        let n = reader.read(&mut buffer)?;
+        let n = reader.read(&mut buf)?;
         if n == 0 {
             break;
         }
-        hasher.update(&buffer[..n]);
+        hasher.update(&buf[..n]);
     }
-    let hash = hasher.finalize();
-    Ok(format!("{:x}", hash))
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn format_duration(d: Duration) -> String {
@@ -222,3 +249,4 @@ fn format_duration(d: Duration) -> String {
     let m_part = m % 60;
     format!("{:02}:{:02}:{:02}.{:03}", h, m_part, s_part, ms_part)
 }
+

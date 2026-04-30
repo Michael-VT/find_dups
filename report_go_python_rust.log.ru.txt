@@ -1,20 +1,21 @@
 Python
-⠠⠵ py find_dups/find_dups_pthon/find_dups_python.py  ~/Documents/Components /Volumes/Transcend/Components
+$ py find_dups_pthon/find_dups_python_e.py  ~/Documents/Components /Volumes/Transcend/Components
 Сбор файлов... найдено 149044 файлов
 Параллельное хеширование 128964 файлов (воркеров: 12)...
-Хеширование завершено за 00:01:55.751
+Хеширование завершено за 00:01:49.337
+Создан duprm_py.sh
 
 Просмотрено файлов: 149044
-Найдено дубликатов (файлов для удаления): 0
+Найдено дубликатов (файлов для удаления): 920
 Время работы:
-  - 326.243 секунд
-  - 00:05:26.243
+  - 250.790 секунд
+  - 00:04:10.790
 Отчёты: duplicates_py.csv, sort_dup_py.csv
 Скрипт удаления: duprm_py.sh
 
 
 Rust
-⠠⠵ cargo build --release
+$ cargo build --release
     Updating crates.io index
      Locking 61 packages to latest compatible versions
       Adding android_system_properties v0.1.5
@@ -30,8 +31,6 @@ Rust
       Adding crossbeam-epoch v0.9.18
       Adding crossbeam-utils v0.8.21
       Adding crypto-common v0.1.7
-      Adding csv v1.4.0
-      Adding csv-core v0.1.13
       Adding digest v0.10.7
       Adding either v1.15.0
       Adding find-msvc-tools v0.1.9
@@ -108,7 +107,7 @@ Rust
    Compiling csv v1.4.0
    Compiling find_dups v1.0.0 (/Users/mich/work/Antigravity/github/find_dups/find_dups_rust)
     Finished `release` profile [optimized] target(s) in 9.27s
-╰─⠠⠵ ./target/release/find_dups ~/Documents/Components /Volumes/Transcend/Components
+$ ./target/release/find_dups ~/Documents/Components /Volumes/Transcend/Components
 Параллельное хеширование 128738 файлов (потоков: 12)...
 Хеширование завершено за 127.519858275s
 
@@ -120,8 +119,9 @@ Rust
 Отчёты: duplicates_rs.csv, sort_dup_rs.csv
 Скрипт удаления: duprm_rs.sh
 
+
 Go
-─⠠⠵ ./find_dups_go/find_dups_go ~/Documents/Components /Volumes/Transcend/Components 
+$ ./find_dups_go/find_dups_go ~/Documents/Components /Volumes/Transcend/Components 
 Параллельное хеширование 128738 файлов (воркеров: 12)...
 Хеширование завершено за 1m31.992391875s
 
@@ -132,4 +132,3 @@ Go
   - 00:03:06.039
 Отчёты: duplicates_go.csv, sort_dup_go.csv
 Скрипт удаления: duprm_go.sh
-

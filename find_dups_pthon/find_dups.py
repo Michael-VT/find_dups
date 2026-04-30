@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""
+find_dups.py - Поиск дубликатов файлов (только обычные файлы, без симлинков).
+"""
+
+import os
+import sys
+import hashlib
+import csv
+import time
+from multiprocessing import Pool, cpu_count
+from collections import defaultdict
+
+BUFFER_SIZE = 64 * 1024
+NUM_WORKERS = cpu_count()
+
+def is_regular_file(path):
+    """Возвращает True, если путь ведёт к обычному файлу (не директория, не symlink)."""
+    try:
+        st = os.lstat(path)          # не следует по symlink
+        return (st.st_mode & 0o170000) == 0o100000  # S_IFREG
+    except OSError:
+        return False
+
+def collect_files(roots):
+    """Рекурсивный обход: добавляет только обычные файлы."""
+    files = []
+    next_id = 1
+    for root in roots:
+        root_path = os.path.abspath(os.path.expanduser(root))
+        if not os.path.exists(root_path):
+            print(f"Предупреждение: {root_path} не существует", file=sys.stderr)
+            continue
+        for dirpath, dirnames, filenames in os.walk(root_path, followlinks=False):
+            for fn in filenames:
+                full = os.path.join(dirpath, fn)
+                if is_regular_file(full):
+                    try:
+                        st = os.lstat(full)
+                    except OSError:
+                        continue
+                    files.append({
+                        'id': next_id,
+                        'path': full,
+                        'size': st.st_size,
+                        'mtime': st.st_mtime,
+                        'ctime': st.st_birthtime if hasattr(st, 'st_birthtime') else st.st_ctime,
+                        'hash': None
+                    })
+                    next_id += 1
+    return files
+
+def compute_sha256(file_path):
+    try:
+        sha = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(BUFFER_SIZE), b''):
+                sha.update(chunk)
+        return sha.hexdigest()
+    except Exception:
+        return None
+
+def parallel_hash(chunk):
+    for f in chunk:
+        f['hash'] = compute_sha256(f['path'])
+    return chunk
+
+def format_duration(seconds):
+    ms = int(seconds * 1000)
+    s, ms = divmod(ms, 1000)
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
+
+def write_csv(filepath, rows, header):
+    try:
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(rows)
+        return True
+    except Exception as e:
+        print(f"Ошибка записи {filepath}: {e}", file=sys.stderr)
+        return False
+
+def main():
+    if len(sys.argv) < 2:
+        print("Использование: python3 find_dups.py <дир1> [<дир2> ...]")
+        sys.exit(1)
+
+    start_total = time.time()
+    roots = sys.argv[1:]
+
+    print("Сбор файлов...", end=' ', flush=True)
+    all_files = collect_files(roots)
+    total_scanned = len(all_files)
+    print(f"найдено {total_scanned} файлов")
+    if total_scanned == 0:
+        return
+
+    # Группировка по размеру
+    by_size = defaultdict(list)
+    for f in all_files:
+        by_size[f['size']].append(f)
+
+    # Файлы для хеширования (размер не уникален)
+    files_to_hash = []
+    for group in by_size.values():
+        if len(group) > 1:
+            files_to_hash.extend(group)
+    total_to_hash = len(files_to_hash)
+
+    if total_to_hash > 0:
+        print(f"Параллельное хеширование {total_to_hash} файлов (воркеров: {NUM_WORKERS})...")
+        start_hash = time.time()
+
+        chunk_size = max(1, total_to_hash // (NUM_WORKERS * 4))
+        chunks = [files_to_hash[i:i+chunk_size] for i in range(0, total_to_hash, chunk_size)]
+
+        with Pool(NUM_WORKERS) as pool:
+            results = pool.map(parallel_hash, chunks)
+        # Обновляем оригинальные объекты
+        updated = {}
+        for chunk in results:
+            for f in chunk:
+                updated[f['id']] = f
+        for size, group in by_size.items():
+            for i, f in enumerate(group):
+                if f['id'] in updated:
+                    group[i] = updated[f['id']]
+        for i, f in enumerate(all_files):
+            if f['id'] in updated:
+                all_files[i] = updated[f['id']]
+
+        print(f"Хеширование завершено за {format_duration(time.time() - start_hash)}")
+
+    # Формирование групп дубликатов
+    dup_groups = []  # (size, list_of_dicts, hash)
+    for size, group in by_size.items():
+        if len(group) < 2:
+            continue
+        hash_groups = defaultdict(list)
+        for f in group:
+            if f['hash']:
+                hash_groups[f['hash']].append(f)
+        for h, g in hash_groups.items():
+            if len(g) > 1:
+                g.sort(key=lambda x: x['id'])
+                dup_groups.append((size, g, h))
+
+    # CSV dups
+    dup_rows = []
+    bash_lines = ["#!/bin/bash", "# Generated by find_dups.py", "set -e", ""]
+    dups_to_delete = 0
+    for size, group, h in dup_groups:
+        for f in group:
+            ctime = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(f['ctime'])) + 'Z'
+            mtime = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(f['mtime'])) + 'Z'
+            dup_rows.append([f['id'], f['path'], size, h, ctime, mtime])
+        for f in group[1:]:
+            dups_to_delete += 1
+            escaped = f['path'].replace("'", "'\\''")
+            bash_lines.append(f"rm -- '{escaped}'")
+    bash_lines.append('')
+    bash_lines.append('echo "Deletion complete."')
+
+    write_csv('duplicates_py.csv', dup_rows,
+              ['FileID', 'Path', 'Size', 'Hash', 'CreationTime', 'ModificationTime'])
+    with open('duprm_py.sh', 'w') as f:
+        f.write('\n'.join(bash_lines))
+    os.chmod('duprm_py.sh', 0o755)
+    print("Создан duprm_py.sh")
+
+    # Sort CSV
+    sorted_files = sorted(all_files, key=lambda x: x['size'], reverse=True)
+    sort_rows = []
+    for f in sorted_files:
+        ctime = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(f['ctime'])) + 'Z'
+        mtime = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(f['mtime'])) + 'Z'
+        sort_rows.append([f['id'], f['path'], f['size'], f['hash'] or '', ctime, mtime])
+    write_csv('sort_dup_py.csv', sort_rows,
+              ['FileID', 'Path', 'Size', 'Hash', 'CreationTime', 'ModificationTime'])
+
+    elapsed = time.time() - start_total
+    print(f"\nПросмотрено файлов: {total_scanned}")
+    print(f"Найдено дубликатов (файлов для удаления): {dups_to_delete}")
+    print(f"Время работы:")
+    print(f"  - {elapsed:.3f} секунд")
+    print(f"  - {format_duration(elapsed)}")
+    print("Отчёты: duplicates_py.csv, sort_dup_py.csv")
+    print("Скрипт удаления: duprm_py.sh")
+
+if __name__ == '__main__':
+    main()

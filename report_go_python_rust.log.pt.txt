@@ -1,14 +1,15 @@
 Python
-$ py find_dups/find_dups_pthon/find_dups_python.py  ~/Documents/Components /Volumes/Transcend/Components
+$ py find_dups_pthon/find_dups_python_e.py  ~/Documents/Components /Volumes/Transcend/Components
 Coletando arquivos... 149044 arquivos encontrados
 Hashing paralelo de 128964 arquivos (workers: 12)...
-Hashing concluído em 00:01:55.751
+Hashing concluído em 00:01:49.337
+duprm_py.sh criado
 
 Arquivos scaneados: 149044
-Duplicados encontrados (arquivos para exclusão): 0
+Duplicados encontrados (arquivos para exclusão): 920
 Tempo de execução:
-  - 326.243 segundos
-  - 00:05:26.243
+  - 250.790 segundos
+  - 00:04:10.790
 Relatórios: duplicates_py.csv, sort_dup_py.csv
 Script de exclusão: duprm_py.sh
 
