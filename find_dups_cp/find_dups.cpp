@@ -112,6 +112,19 @@ std::unordered_map<uint64_t, std::vector<FileInfo*>> group_by_size(std::vector<F
     return groups;
 }
 
+std::string csv_escape(const std::string& s) {
+    if (s.find(',') != std::string::npos || s.find('"') != std::string::npos || s.find('\n') != std::string::npos) {
+        std::string escaped = "\"";
+        for (char c : s) {
+            if (c == '"') escaped += "\"\"";
+            else escaped += c;
+        }
+        escaped += "\"";
+        return escaped;
+    }
+    return s;
+}
+
 std::string format_duration(double seconds) {
     int64_t ms_total = static_cast<int64_t>(seconds * 1000);
     int64_t ms = ms_total % 1000;
@@ -373,7 +386,7 @@ int main(int argc, char* argv[]) {
         for (auto& row : csv_dups) {
             for (size_t i = 0; i < row.size(); ++i) {
                 if (i) csv_file << ',';
-                csv_file << row[i];
+                csv_file << csv_escape(row[i]);
             }
             csv_file << '\n';
         }
@@ -398,12 +411,12 @@ int main(int argc, char* argv[]) {
     if (sort_file) {
         sort_file << "FileID,Path,Size,Hash,CreationTime,ModificationTime\n";
         for (auto& f : sorted) {
-            sort_file << f.id << ','
-                      << f.path.string() << ','
-                      << f.size << ','
-                      << f.hash << ','
-                      << format_time(f.birth_time) << ','
-                      << format_time(f.mod_time) << '\n';
+            sort_file << csv_escape(std::to_string(f.id)) << ','
+                      << csv_escape(f.path.string()) << ','
+                      << csv_escape(std::to_string(f.size)) << ','
+                      << csv_escape(f.hash) << ','
+                      << csv_escape(format_time(f.birth_time)) << ','
+                      << csv_escape(format_time(f.mod_time)) << '\n';
         }
     } else {
         std::cerr << "Error creating sort_dup_cpp.csv\n";

@@ -113,6 +113,14 @@ async function generateAnalytics(allFiles, bySize, elapsed) {
 }
 
 // ---------- Utility functions ----------
+function csvEscape(s) {
+    const str = String(s);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}
+
 function formatTime(ts) {
     const d = new Date(ts);
     return d.toISOString().replace(/\.\d+Z$/, 'Z');
@@ -303,7 +311,7 @@ async function main() {
             for (const f of same) {
                 csvRows.push([
                     f.id,
-                    f.path,
+                    csvEscape(f.path),
                     size,
                     hash,
                     formatTime(f.birthTime),
@@ -329,7 +337,7 @@ async function main() {
     // 7. Sorted CSV of all files
     const sorted = [...allFiles].sort((a,b) => b.size - a.size);
     const sortRows = sorted.map(f => [
-        f.id, f.path, f.size, f.hash || '',
+        f.id, csvEscape(f.path), f.size, f.hash || '',
         formatTime(f.birthTime), formatTime(f.modTime)
     ]);
     const sortContent = [csvHeader, ...sortRows].map(row => row.join(',')).join('\n');
