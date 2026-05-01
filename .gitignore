@@ -1,5 +1,12 @@
 find_dups_rust/target
 *.log
+*.log.*
+report_*.txt
 *.csv
 *.sh
+*.json
+.DS_Store
+__pycache__/
+find_dups_go/find_dups
+find_dups_cp/find_dups_cpp
 

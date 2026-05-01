@@ -1,15 +1,18 @@
 use std::collections::HashMap;
 use std::fs::{self, File, Metadata};
 use std::io::{BufReader, Read, Write};
-use std::os::darwin::fs::MetadataExt;   // macOS: birth time
-use std::path::PathBuf;
+use std::os::darwin::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use chrono::{DateTime, Local};
 use rayon::prelude::*;
 
-#[derive(Debug, Clone)]
+const BUFFER_SIZE: usize = 65536;
+
+#[derive(Debug)]
 struct FileInfo {
     id: usize,
     path: PathBuf,
@@ -19,21 +22,233 @@ struct FileInfo {
     hash: String,
 }
 
+// ── Analytics types ────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct Analytics {
+    summary: Summary,
+    by_category: HashMap<String, CategoryStats>,
+    by_extension: HashMap<String, ExtensionStats>,
+    size_distribution: HashMap<String, usize>,
+}
+
+#[derive(serde::Serialize)]
+struct Summary {
+    total_files: usize,
+    total_size: u64,
+    duplicate_files: usize,
+    duplicate_size: u64,
+    categories: usize,
+    extensions: usize,
+    elapsed_seconds: f64,
+}
+
+#[derive(serde::Serialize)]
+struct CategoryStats {
+    count: usize,
+    total_size: u64,
+    extensions: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct ExtensionStats {
+    count: usize,
+    total_size: u64,
+    category: String,
+}
+
+// ── Category mapping ──────────────────────────────────────────────
+
+fn get_category(ext: &str) -> &'static str {
+    match ext {
+        // source
+        "c" | "h" | "cpp" | "hpp" | "cc" | "cxx" | "m" | "mm" | "s" | "S"
+        | "java" | "kt" | "py" | "js" | "ts" | "rs" | "go" | "rb" | "swift" | "sh" => "source",
+        // firmware
+        "hex" | "bin" | "elf" | "dfu" | "flash" | "map" => "firmware",
+        // ide
+        "uvprojx" | "uvoptx" | "ewp" | "eww" | "ewt"
+        | "cproject" | "project" | "mxproject" | "ioc" => "ide",
+        // config
+        "yaml" | "yml" | "cmake" | "json" | "xml"
+        | "conf" | "cfg" | "ini" | "toml" | "properties" => "config",
+        // docs
+        "pdf" | "md" | "txt" | "html" | "htm" | "rst"
+        | "chm" | "doc" | "docx" | "rtf" => "docs",
+        // image
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
+        | "bmp" | "ico" | "tiff" | "tif" => "image",
+        // binary
+        "exe" | "dll" | "so" | "dylib" | "o" | "a" | "lib" | "obj" | "gch" | "pch" => "binary",
+        // archive
+        "zip" | "7z" | "tar" | "gz" | "bz2" | "xz" | "rar" | "tgz" => "archive",
+        // media
+        "mp4" | "wav" | "avi" | "mp3" | "ogg" | "flac" | "mov" | "wmv" => "media",
+        // font
+        "ttf" | "otf" | "woff" | "woff2" => "font",
+        // data
+        "csv" | "dts" | "dtsi" | "overlay" | "ld" | "icf" | "srec" => "data",
+        _ => "other",
+    }
+}
+
+// ── Analytics generation ──────────────────────────────────────────
+
+fn generate_analytics(
+    all_files: &[FileInfo],
+    by_size: &HashMap<u64, Vec<usize>>,
+    elapsed: Duration,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Identify duplicate file indices (second file onward in each hash group)
+    let mut dup_indices: Vec<usize> = Vec::new();
+    for indices in by_size.values() {
+        if indices.len() < 2 { continue; }
+        let mut hash_groups: HashMap<&str, Vec<usize>> = HashMap::new();
+        for &idx in indices {
+            let h = &all_files[idx].hash;
+            if !h.is_empty() {
+                hash_groups.entry(h.as_str()).or_default().push(idx);
+            }
+        }
+        for same in hash_groups.values() {
+            if same.len() >= 2 {
+                // skip first, rest are duplicates
+                for &idx in same.iter().skip(1) {
+                    dup_indices.push(idx);
+                }
+            }
+        }
+    }
+
+    let duplicate_files = dup_indices.len();
+    let duplicate_size: u64 = dup_indices.iter().map(|&i| all_files[i].size).sum();
+
+    // Collect by category and extension
+    let mut cat_stats: HashMap<String, CategoryStats> = HashMap::new();
+    let mut ext_stats: HashMap<String, ExtensionStats> = HashMap::new();
+
+    for f in all_files {
+        let ext = f.path.extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let category = get_category(&ext).to_string();
+
+        cat_stats.entry(category.clone())
+            .or_insert_with(|| CategoryStats { count: 0, total_size: 0, extensions: Vec::new() })
+            .count += 1;
+        cat_stats.get_mut(&category).unwrap().total_size += f.size;
+
+        if let Some(cs) = cat_stats.get_mut(&category) {
+            if !ext.is_empty() && !cs.extensions.contains(&ext) {
+                cs.extensions.push(ext.clone());
+            }
+        }
+
+        ext_stats.entry(ext.clone())
+            .or_insert_with(|| ExtensionStats { count: 0, total_size: 0, category: category.clone() })
+            .count += 1;
+        ext_stats.get_mut(&ext).unwrap().total_size += f.size;
+    }
+
+    // Size distribution
+    let mut size_dist: HashMap<String, usize> = HashMap::new();
+    for key in &["0_bytes", "under_1kb", "1kb_100kb", "100kb_1mb", "1mb_100mb", "over_100mb"] {
+        size_dist.insert(key.to_string(), 0);
+    }
+    for f in all_files {
+        let bin = if f.size == 0 { "0_bytes" }
+                  else if f.size < 1024 { "under_1kb" }
+                  else if f.size < 100 * 1024 { "1kb_100kb" }
+                  else if f.size < 1024 * 1024 { "100kb_1mb" }
+                  else if f.size < 100 * 1024 * 1024 { "1mb_100mb" }
+                  else { "over_100mb" };
+        *size_dist.get_mut(bin).unwrap() += 1;
+    }
+
+    let total_size: u64 = all_files.iter().map(|f| f.size).sum();
+    let analytics = Analytics {
+        summary: Summary {
+            total_files: all_files.len(),
+            total_size,
+            duplicate_files,
+            duplicate_size,
+            categories: cat_stats.len(),
+            extensions: ext_stats.len(),
+            elapsed_seconds: elapsed.as_secs_f64(),
+        },
+        by_category: cat_stats,
+        by_extension: ext_stats,
+        size_distribution: size_dist,
+    };
+
+    // Write JSON
+    let json = serde_json::to_string_pretty(&analytics)?;
+    let mut f = File::create("analytics_rs.json")?;
+    f.write_all(json.as_bytes())?;
+
+    // Human-readable summary
+    println!("\n--- File Type Analytics ---");
+    println!("Categories: {}", analytics.summary.categories);
+    println!("Extensions: {}", analytics.summary.extensions);
+    println!("Duplicate files: {} ({:.2} MB)", duplicate_files, duplicate_size as f64 / (1024.0 * 1024.0));
+    println!("\nBy category:");
+    // Sort by count descending
+    let mut cats: Vec<_> = analytics.by_category.iter().collect();
+    cats.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+    for (name, stats) in &cats {
+        println!("  {:12} {:6} files  {:.2} MB", name, stats.count, stats.total_size as f64 / (1024.0 * 1024.0));
+    }
+    println!("\nSize distribution:");
+    for key in &["0_bytes", "under_1kb", "1kb_100kb", "100kb_1mb", "1mb_100mb", "over_100mb"] {
+        let count = analytics.size_distribution.get(*key).unwrap_or(&0);
+        println!("  {:12} {}", key, count);
+    }
+    println!("Analytics written to analytics_rs.json");
+
+    Ok(())
+}
+
+// ── Core helpers ──────────────────────────────────────────────────
+
 fn is_regular_file(metadata: &Metadata) -> bool {
     metadata.is_file() && !metadata.is_symlink()
+}
+
+fn compute_sha256(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; BUFFER_SIZE];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 { break; }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn format_duration(d: Duration) -> String {
+    let ms = d.as_millis();
+    let s = ms / 1000;
+    let ms_part = ms % 1000;
+    let m = s / 60;
+    let s_part = s % 60;
+    let h = m / 60;
+    let m_part = m % 60;
+    format!("{:02}:{:02}:{:02}.{:03}", h, m_part, s_part, ms_part)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Использование: find_dups <директория1> [<директория2> ...]");
+        eprintln!("Usage: find_dups <dir1> [<dir2> ...]");
         std::process::exit(1);
     }
     let roots = &args[1..];
-
     let start_total = std::time::Instant::now();
 
-    // ----- 1. Сбор обычных файлов -----
+    // ----- 1. Collect regular files -----
     let mut all_files = Vec::new();
     let mut next_id = 1;
     let mut scanned = 0;
@@ -48,12 +263,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            if !is_regular_file(&metadata) {
-                continue;
-            }
+            if !is_regular_file(&metadata) { continue; }
+            let size = metadata.len();
+            if size == 0 { continue; } // skip zero-byte files
             scanned += 1;
             let path = entry.into_path();
-            let size = metadata.len();
             let modified = metadata.modified()?;
             let birth_sec = metadata.st_birthtime();
             let birth_nsec = metadata.st_birthtime_nsec();
@@ -74,56 +288,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ----- 2. Группировка по размеру -----
-    let mut by_size: HashMap<u64, Vec<FileInfo>> = HashMap::new();
-    for f in &all_files {
-        by_size.entry(f.size).or_default().push(f.clone());
+    eprintln!("Collected {} files", scanned);
+    if scanned == 0 { return Ok(()); }
+
+    // ----- 2. Group by size (indices) -----
+    let mut by_size: HashMap<u64, Vec<usize>> = HashMap::new();
+    for (idx, f) in all_files.iter().enumerate() {
+        by_size.entry(f.size).or_default().push(idx);
     }
 
-    // ----- 3. Параллельное хеширование -----
-    let mut files_to_hash = Vec::new();
-    for group in by_size.values() {
-        if group.len() > 1 {
-            files_to_hash.extend(group.iter().cloned());
+    // ----- 3. Parallel hashing -----
+    // Collect indices of files that need hashing (size groups with >1 file)
+    let mut files_to_hash: Vec<usize> = Vec::new();
+    for indices in by_size.values() {
+        if indices.len() > 1 {
+            files_to_hash.extend(indices.iter().copied());
         }
     }
+
     let total_to_hash = files_to_hash.len();
     if total_to_hash > 0 {
         eprintln!(
-            "Параллельное хеширование {} файлов (потоков: {})...",
+            "Parallel hashing {} files (threads: {})...",
             total_to_hash,
             rayon::current_num_threads()
         );
         let start_hash = std::time::Instant::now();
 
-        files_to_hash.par_iter_mut().for_each(|f| {
-            if let Ok(hash) = compute_sha256(&f.path) {
-                f.hash = hash;
-            }
-        });
+        let hashes: Vec<(usize, String)> = files_to_hash
+            .par_iter()
+            .filter_map(|&idx| {
+                let path = &all_files[idx].path;
+                compute_sha256(path).ok().map(|h| (idx, h))
+            })
+            .collect();
 
-        eprintln!("Хеширование завершено за {:?}", start_hash.elapsed());
-
-        // Обновляем хеши в by_size и all_files
-        let mut hash_map = HashMap::new();
-        for f in files_to_hash {
-            hash_map.insert(f.path.clone(), f.hash.clone());
+        for (idx, hash) in hashes {
+            all_files[idx].hash = hash;
         }
-        for (_, group) in by_size.iter_mut() {
-            for f in group.iter_mut() {
-                if let Some(hash) = hash_map.get(&f.path) {
-                    f.hash = hash.clone();
-                }
-            }
-        }
-        for f in &mut all_files {
-            if let Some(hash) = hash_map.get(&f.path) {
-                f.hash = hash.clone();
-            }
-        }
+        eprintln!("Hashing completed in {:?}", start_hash.elapsed());
     }
 
-    // ----- 4. Формирование дубликатов -----
+    // ----- 4. Build duplicate groups -----
     let mut csv_dups = Vec::new();
     let mut bash_lines = vec![
         "#!/bin/bash".to_string(),
@@ -133,36 +339,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     let mut duplicates_count = 0;
 
-    for (size, group) in by_size {
-        if group.len() < 2 {
-            continue;
-        }
-        let mut hash_groups: HashMap<String, Vec<&FileInfo>> = HashMap::new();
-        for f in group.iter() {
-            if !f.hash.is_empty() {
-                hash_groups.entry(f.hash.clone()).or_default().push(f);
+    for (size, indices) in &by_size {
+        if indices.len() < 2 { continue; }
+        let mut hash_groups: HashMap<&str, Vec<usize>> = HashMap::new();
+        for &idx in indices {
+            let h = &all_files[idx].hash;
+            if !h.is_empty() {
+                hash_groups.entry(h.as_str()).or_default().push(idx);
             }
         }
-        for (hash, mut same) in hash_groups {
-            if same.len() < 2 {
-                continue;
-            }
-            same.sort_by_key(|f| f.id);
-            for f in &same {
+        for (hash, mut same_indices) in hash_groups {
+            if same_indices.len() < 2 { continue; }
+            same_indices.sort();
+            for &idx in &same_indices {
+                let f = &all_files[idx];
                 let birth = DateTime::<Local>::from(f.created).to_rfc3339();
                 let modified = DateTime::<Local>::from(f.modified).to_rfc3339();
                 csv_dups.push(vec![
                     f.id.to_string(),
                     f.path.to_string_lossy().to_string(),
                     size.to_string(),
-                    hash.clone(),
+                    hash.to_string(),
                     birth,
                     modified,
                 ]);
             }
-            for f in same.iter().skip(1) {
+            for &idx in same_indices.iter().skip(1) {
                 duplicates_count += 1;
-                let escaped = f.path.to_string_lossy().replace('\'', "'\\''");
+                let escaped = all_files[idx].path.to_string_lossy().replace('\'', "'\\''");
                 bash_lines.push(format!("rm -- '{}'", escaped));
             }
         }
@@ -170,83 +374,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bash_lines.push("".to_string());
     bash_lines.push("echo \"Deletion complete.\"".to_string());
 
-    // Запись CSV и sh
+    // Write CSV and sh
     let mut csv_writer = csv::Writer::from_path("duplicates_rs.csv")?;
-    csv_writer.write_record(&[
-        "FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime",
-    ])?;
-    for row in csv_dups {
-        csv_writer.write_record(&row)?;
-    }
+    csv_writer.write_record(&["FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime"])?;
+    for row in csv_dups { csv_writer.write_record(&row)?; }
     csv_writer.flush()?;
 
     let mut sh_file = File::create("duprm_rs.sh")?;
-    for line in bash_lines {
-        writeln!(sh_file, "{}", line)?;
-    }
+    for line in bash_lines { writeln!(sh_file, "{}", line)?; }
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions("duprm_rs.sh", fs::Permissions::from_mode(0o755));
-    }
+    { let _ = fs::set_permissions("duprm_rs.sh", fs::Permissions::from_mode(0o755)); }
+    drop(sh_file);
 
-    // ----- 5. Сортированный CSV -----
-    let mut sorted = all_files.clone();
-    sorted.sort_by(|a, b| b.size.cmp(&a.size));
+    // ----- 5. Sorted CSV -----
+    let mut sort_indices: Vec<usize> = (0..all_files.len()).collect();
+    sort_indices.sort_by(|&a, &b| all_files[b].size.cmp(&all_files[a].size));
     let mut sort_writer = csv::Writer::from_path("sort_dup_rs.csv")?;
-    sort_writer.write_record(&[
-        "FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime",
-    ])?;
-    for f in sorted {
+    sort_writer.write_record(&["FileID", "Path", "Size", "Hash", "CreationTime", "ModificationTime"])?;
+    for &idx in &sort_indices {
+        let f = &all_files[idx];
         let birth = DateTime::<Local>::from(f.created).to_rfc3339();
         let modified = DateTime::<Local>::from(f.modified).to_rfc3339();
         sort_writer.write_record(&[
             f.id.to_string(),
             f.path.to_string_lossy().to_string(),
             f.size.to_string(),
-            f.hash,
+            f.hash.clone(),
             birth,
             modified,
         ])?;
     }
     sort_writer.flush()?;
 
-    // ----- 6. Статистика -----
+    // ----- 6. Analytics -----
     let elapsed = start_total.elapsed();
-    println!("\nПросмотрено файлов: {}", scanned);
-    println!("Найдено дубликатов (файлов для удаления): {}", duplicates_count);
-    println!("Время работы:");
-    println!("  - {:.3} секунд", elapsed.as_secs_f64());
+    generate_analytics(&all_files, &by_size, elapsed)?;
+
+    // ----- 7. Statistics -----
+    println!("\nFiles scanned: {}", scanned);
+    println!("Duplicates found (files to delete): {}", duplicates_count);
+    println!("Runtime:");
+    println!("  - {:.3} seconds", elapsed.as_secs_f64());
     println!("  - {}", format_duration(elapsed));
-    println!("Отчёты: duplicates_rs.csv, sort_dup_rs.csv");
-    println!("Скрипт удаления: duprm_rs.sh");
+    println!("Reports: duplicates_rs.csv, sort_dup_rs.csv, analytics_rs.json");
+    println!("Delete script: duprm_rs.sh");
 
     Ok(())
 }
-
-fn compute_sha256(path: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut hasher = Sha256::new();
-    let mut buf = [0; 16384];
-    loop {
-        let n = reader.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-fn format_duration(d: Duration) -> String {
-    let ms = d.as_millis();
-    let s = ms / 1000;
-    let ms_part = ms % 1000;
-    let m = s / 60;
-    let s_part = s % 60;
-    let h = m / 60;
-    let m_part = m % 60;
-    format!("{:02}:{:02}:{:02}.{:03}", h, m_part, s_part, ms_part)
-}
-
