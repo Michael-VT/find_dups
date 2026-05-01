@@ -141,6 +141,11 @@ std::string format_duration(double seconds) {
     return oss.str();
 }
 
+std::string to_lower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    return s;
+}
+
 std::string get_category(const std::string& ext) {
     if (ext == ".c" || ext == ".h" || ext == ".cpp" || ext == ".hpp" || ext == ".cc" || ext == ".cxx" ||
         ext == ".m" || ext == ".mm" || ext == ".s" || ext == ".S" || ext == ".java" || ext == ".kt" ||
@@ -179,7 +184,7 @@ void generate_analytics(const std::vector<FileInfo>& all_files,
     int size_bins[6] = {0, 0, 0, 0, 0, 0}; // 0b, <1k, 1k-100k, 100k-1m, 1m-100m, >100m
 
     for (const auto& f : all_files) {
-        std::string ext_s = f.path.extension().string();
+        std::string ext_s = to_lower(f.path.extension().string());
         std::string cat = get_category(ext_s);
         cat_map[cat].count++;
         cat_map[cat].total_bytes += f.size;

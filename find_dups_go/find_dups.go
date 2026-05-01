@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -128,7 +129,7 @@ func generateAnalytics(allFiles []FileInfo, bySize map[int64][]*FileInfo, elapse
 
 	for i := range allFiles {
 		f := &allFiles[i]
-		ext := filepath.Ext(f.Path)
+		ext := strings.ToLower(filepath.Ext(f.Path))
 		cat := getCategory(ext)
 		isDup := dupSet[f.ID]
 

@@ -35,26 +35,28 @@ struct Analytics {
 #[derive(serde::Serialize)]
 struct Summary {
     total_files: usize,
-    total_size: u64,
+    total_size_bytes: u64,
     duplicate_files: usize,
-    duplicate_size: u64,
-    categories: usize,
-    extensions: usize,
-    elapsed_seconds: f64,
+    duplicate_size_bytes: u64,
+    recoverable_bytes: u64,
+    scan_duration_seconds: f64,
 }
 
 #[derive(serde::Serialize)]
 struct CategoryStats {
     count: usize,
-    total_size: u64,
-    extensions: Vec<String>,
+    total_bytes: u64,
+    duplicate_count: usize,
+    duplicate_bytes: u64,
+    extensions: HashMap<String, usize>,
 }
 
 #[derive(serde::Serialize)]
 struct ExtensionStats {
     count: usize,
-    total_size: u64,
-    category: String,
+    total_bytes: u64,
+    duplicate_count: usize,
+    duplicate_bytes: u64,
 }
 
 // ── Category mapping ──────────────────────────────────────────────
@@ -100,7 +102,7 @@ fn generate_analytics(
     elapsed: Duration,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Identify duplicate file indices (second file onward in each hash group)
-    let mut dup_indices: Vec<usize> = Vec::new();
+    let mut dup_set: std::collections::HashSet<usize> = std::collections::HashSet::new();
     for indices in by_size.values() {
         if indices.len() < 2 { continue; }
         let mut hash_groups: HashMap<&str, Vec<usize>> = HashMap::new();
@@ -112,43 +114,46 @@ fn generate_analytics(
         }
         for same in hash_groups.values() {
             if same.len() >= 2 {
-                // skip first, rest are duplicates
-                for &idx in same.iter().skip(1) {
-                    dup_indices.push(idx);
+                let mut sorted = same.clone();
+                sorted.sort();
+                for &idx in sorted.iter().skip(1) {
+                    dup_set.insert(idx);
                 }
             }
         }
     }
 
-    let duplicate_files = dup_indices.len();
-    let duplicate_size: u64 = dup_indices.iter().map(|&i| all_files[i].size).sum();
+    let duplicate_files = dup_set.len();
+    let duplicate_size: u64 = dup_set.iter().map(|&i| all_files[i].size).sum();
 
     // Collect by category and extension
     let mut cat_stats: HashMap<String, CategoryStats> = HashMap::new();
     let mut ext_stats: HashMap<String, ExtensionStats> = HashMap::new();
 
-    for f in all_files {
-        let ext = f.path.extension()
+    for (idx, f) in all_files.iter().enumerate() {
+        let ext_raw = f.path.extension()
             .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        let category = get_category(&ext).to_string();
+            .unwrap_or("");
+        let ext = if ext_raw.is_empty() { String::new() } else { format!(".{}", ext_raw.to_lowercase()) };
+        let category = get_category(&ext_raw.to_lowercase()).to_string();
+        let is_dup = dup_set.contains(&idx);
 
         cat_stats.entry(category.clone())
-            .or_insert_with(|| CategoryStats { count: 0, total_size: 0, extensions: Vec::new() })
+            .or_insert_with(|| CategoryStats { count: 0, total_bytes: 0, duplicate_count: 0, duplicate_bytes: 0, extensions: HashMap::new() })
             .count += 1;
-        cat_stats.get_mut(&category).unwrap().total_size += f.size;
-
-        if let Some(cs) = cat_stats.get_mut(&category) {
-            if !ext.is_empty() && !cs.extensions.contains(&ext) {
-                cs.extensions.push(ext.clone());
-            }
+        let cs = cat_stats.get_mut(&category).unwrap();
+        cs.total_bytes += f.size;
+        if is_dup { cs.duplicate_count += 1; cs.duplicate_bytes += f.size; }
+        if !ext.is_empty() {
+            *cs.extensions.entry(ext.clone()).or_insert(0) += 1;
         }
 
         ext_stats.entry(ext.clone())
-            .or_insert_with(|| ExtensionStats { count: 0, total_size: 0, category: category.clone() })
+            .or_insert_with(|| ExtensionStats { count: 0, total_bytes: 0, duplicate_count: 0, duplicate_bytes: 0 })
             .count += 1;
-        ext_stats.get_mut(&ext).unwrap().total_size += f.size;
+        let es = ext_stats.get_mut(&ext).unwrap();
+        es.total_bytes += f.size;
+        if is_dup { es.duplicate_count += 1; es.duplicate_bytes += f.size; }
     }
 
     // Size distribution
@@ -170,12 +175,11 @@ fn generate_analytics(
     let analytics = Analytics {
         summary: Summary {
             total_files: all_files.len(),
-            total_size,
+            total_size_bytes: total_size,
             duplicate_files,
-            duplicate_size,
-            categories: cat_stats.len(),
-            extensions: ext_stats.len(),
-            elapsed_seconds: elapsed.as_secs_f64(),
+            duplicate_size_bytes: duplicate_size,
+            recoverable_bytes: duplicate_size,
+            scan_duration_seconds: elapsed.as_secs_f64(),
         },
         by_category: cat_stats,
         by_extension: ext_stats,
@@ -189,20 +193,10 @@ fn generate_analytics(
 
     // Human-readable summary
     println!("\n--- File Type Analytics ---");
-    println!("Categories: {}", analytics.summary.categories);
-    println!("Extensions: {}", analytics.summary.extensions);
-    println!("Duplicate files: {} ({:.2} MB)", duplicate_files, duplicate_size as f64 / (1024.0 * 1024.0));
-    println!("\nBy category:");
-    // Sort by count descending
     let mut cats: Vec<_> = analytics.by_category.iter().collect();
     cats.sort_by(|a, b| b.1.count.cmp(&a.1.count));
     for (name, stats) in &cats {
-        println!("  {:12} {:6} files  {:.2} MB", name, stats.count, stats.total_size as f64 / (1024.0 * 1024.0));
-    }
-    println!("\nSize distribution:");
-    for key in &["0_bytes", "under_1kb", "1kb_100kb", "100kb_1mb", "1mb_100mb", "over_100mb"] {
-        let count = analytics.size_distribution.get(*key).unwrap_or(&0);
-        println!("  {:12} {}", key, count);
+        println!("  {:12} {:6} files, {} duplicates", name, stats.count, stats.duplicate_count);
     }
     println!("Analytics written to analytics_rs.json");
 

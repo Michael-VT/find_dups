@@ -129,9 +129,14 @@ def generate_analytics(all_files, dup_groups, elapsed):
     dup_size = sum(f['size'] for f in all_files if f['id'] in dup_ids)
 
     # Helper to get extension and category
-    def get_ext(path):
-        _, ext = os.path.splitext(path)
-        return ext.lower() if ext else '(none)'
+    def get_ext(file_path):
+        basename = os.path.basename(file_path)
+        dot = basename.rfind('.')
+        if dot > 0:
+            return basename[dot:].lower()
+        elif dot == 0 and len(basename) > 1:
+            return basename.lower()
+        return '(none)'
 
     # by_extension
     by_ext = defaultdict(lambda: {'count': 0, 'total_bytes': 0, 'duplicate_count': 0, 'duplicate_bytes': 0})
