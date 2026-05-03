@@ -150,6 +150,25 @@ Getestet mit ~149.000 Dateien in zwei Verzeichnissen (lokale SSD + externes USB-
 - Null-Byte-Dateien werden übersprungen (112 falsch-positive „Duplikate" eliminiert)
 - Rust und C++ führen bei der Leistung; alle Implementierungen nutzen parallele Verarbeitung
 
+
+## Echtest-Ergebnisse (60 GB)
+
+Getestet mit **77.313 Dateien** (60 GB) über vier Verzeichnisse in Produktionsumgebung:
+
+| Metrik          | **C++**  | **Go**   | **Rust** | **Python** | **JavaScript** |
+|-----------------|----------|----------|----------|------------|----------------|
+| Zeit            | **70,9s** | 72,7s    | 77,8s    | 82,1s      | 86,1s         |
+| Duplikate       | 7.607    | 7.607    | 7.607    | 7.607      | 7.607         |
+| Leistung        | 🥇 **1st** | 🥈 2nd   | 🥉 3rd   | 4th        | 5th           |
+
+**Alle Implementierungen produzieren identische Ergebnisse** (77.313 Dateien, 7.607 Duplikate gefunden).
+
+**Wichtige Beobachtungen:**
+- C++ zeigt die beste Leistung (70,9s)
+- Alle Versionen verarbeiten große Datensätze (60 GB) korrekt
+- Echtzeit-Fortschrittsanzeigen zeigen Dateianzahl und -größe während der Erfassung
+- Stiller Betrieb: Keine Warnungen über Dateisystemberechtigungen während des Scans
+
 ## Dateityp-Kategorien
 
 Die Analyse kategorisiert Dateien nach Erweiterung in 12 Kategorien:

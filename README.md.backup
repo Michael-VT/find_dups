@@ -149,25 +149,6 @@ Tested on ~149,000 files across two directories (local SSD + external USB drive,
 - Zero-byte files are skipped (112 false-positive "duplicates" eliminated)
 - Rust and C++ lead performance; all implementations use parallel processing
 
-
-
-## Real-World Test Results (60 GB)
-
-Tested on **77,313 files** (60 GB) across four directories in production environment:
-
-| Metric          | **C++**  | **Go**   | **Rust** | **Python** | **JavaScript** |
-|-----------------|----------|----------|----------|------------|----------------|
-| Time            | **70.9s** | 72.7s    | 77.8s    | 82.1s      | 86.1s          |
-| Duplicates      | 7,607    | 7,607    | 7,607    | 7,607      | 7,607          |
-| Performance     | 🥇 **1st** | 🥈 2nd   | 🥉 3rd   | 4th        | 5th            |
-
-**All implementations produce identical results** (77,313 files, 7,607 duplicates found).
-
-**Key observations:**
-- C++ demonstrates best performance (70.9s)
-- All versions handle large datasets (60 GB) correctly
-- Real-time progress indicators show file count and size during collection
-- Silent operation: no filesystem permission warnings during scanning
 ## File Type Categories
 
 Analytics categorize files by extension into 12 categories:
