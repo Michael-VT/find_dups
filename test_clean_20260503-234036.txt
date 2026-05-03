@@ -1,172 +1,0 @@
-./find_dups_go/find_dups_go /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 12079 files, 9.9 GB scanned...Collecting files... 26381 files, 20.3 GB scanned...Collecting files... 39681 files, 27.0 GB scanned...Collecting files... 49697 files, 45.7 GB scanned...Collecting files... found 77438 files, 57.0 GB
-Parallel hashing 54601 files (workers: 12)...
-[====>                                   ] 10.7% (5825/54601 files) ETA: 41s[==========>                             ] 25.8% (14074/54601 files) ETA: 28s[==============>                         ] 36.7% (20022/54601 files) ETA: 25s[==================>                     ] 45.2% (24667/54601 files) ETA: 24s[====================>                   ] 51.9% (28357/54601 files) ETA: 23s[========================>               ] 62.2% (33974/54601 files) ETA: 18s[==============================>         ] 76.4% (41727/54601 files) ETA: 10s[===================================>    ] 87.6% (47821/54601 files) ETA: 5s[======================================> ] 96.7% (52778/54601 files) ETA: 1s[========================================] 100.0% (54601/54601 files) Completed in 46s
-Hashing completed in 46.568302293s
-
---- File Type Analytics ---
-  archive        485 files, 14 duplicates
-  binary         241 files, 2 duplicates
-  config        2840 files, 106 duplicates
-  data           164 files, 3 duplicates
-  docs         13464 files, 1869 duplicates
-  firmware       262 files, 1 duplicates
-  font           491 files, 298 duplicates
-  ide            211 files, 48 duplicates
-  image        10968 files, 2226 duplicates
-  media         1149 files, 150 duplicates
-  other        13467 files, 1666 duplicates
-  source       33696 files, 1260 duplicates
-Analytics written to analytics_go.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 72.193 seconds
-  - 00:01:12.192
-Reports: duplicates_go.csv, sort_dup_go.csv, analytics_go.json
-Delete script: duprm_go.sh
-./find_dups_cp/find_dups_cpp /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 11867 files, 11.0 GB scanned...Collecting files... 22735 files, 22.8 GB scanned...Collecting files... 32209 files, 27.2 GB scanned...Collecting files... 43230 files, 34.1 GB scanned...Collecting files... 52043 files, 48.3 GB scanned...Collecting files... found 77438 files, 57.0 GB
-Parallel hashing 54601 files (workers: 12)...
-Hashing: 0/54601 files |Hashing: 1553/54601 files /Hashing: 3297/54601 files -Hashing: 6431/54601 files \Hashing: 9113/54601 files |Hashing: 12718/54601 files /Hashing: 14958/54601 files -Hashing: 15960/54601 files \Hashing: 17341/54601 files |Hashing: 17810/54601 files /Hashing: 18631/54601 files -Hashing: 20272/54601 files \Hashing: 21473/54601 files |Hashing: 21505/54601 files /Hashing: 22017/54601 files -Hashing: 22494/54601 files \Hashing: 23627/54601 files |Hashing: 24502/54601 files /Hashing: 25748/54601 files -Hashing: 26149/54601 files \Hashing: 27180/54601 files |Hashing: 28159/54601 files /Hashing: 28723/54601 files -Hashing: 29582/54601 files \Hashing: 30930/54601 files |Hashing: 32058/54601 files /Hashing: 33850/54601 files -Hashing: 34342/54601 files \Hashing: 35065/54601 files |Hashing: 36213/54601 files /Hashing: 36859/54601 files -Hashing: 37215/54601 files \Hashing: 37394/54601 files |Hashing: 38914/54601 files /Hashing: 39482/54601 files -Hashing: 40046/54601 files \Hashing: 40600/54601 files |Hashing: 43430/54601 files /Hashing: 45709/54601 files -Hashing: 47470/54601 files \Hashing: 49465/54601 files |Hashing: 50779/54601 files /Hashing: 53542/54601 files -Hashing: 53568/54601 files \Hashing: 53711/54601 files |Hashing: 53923/54601 files /Hashing: 54318/54601 files -Hashing: 54601/54601 files 
-Hashing completed in 47.1934 seconds
-
---- File Type Analytics ---
-  ide       : 95 files, 0 duplicates
-  firmware  : 262 files, 1 duplicates
-  source    : 33696 files, 1260 duplicates
-  archive   : 485 files, 14 duplicates
-  font      : 491 files, 298 duplicates
-  image     : 10968 files, 2226 duplicates
-  media     : 1149 files, 150 duplicates
-  other     : 13583 files, 1720 duplicates
-  config    : 2840 files, 106 duplicates
-  data      : 164 files, 3 duplicates
-  binary    : 241 files, 2 duplicates
-  docs      : 13464 files, 1863 duplicates
-Analytics written to analytics_cpp.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 78.454 seconds
-  - 00:01:18.453
-Reports: duplicates_cpp.csv, sort_dup_cpp.csv, analytics_cpp.json
-Delete script: duprm_cpp.sh
-node find_dups_js/find_dups.js /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... Collecting files... 11452 files, 6.8 GB scanned...Collecting files... 23438 files, 20.3 GB scanned...Collecting files... 29893 files, 20.3 GB scanned...Collecting files... 44495 files, 43.5 GB scanned...Collecting files... 52822 files, 48.3 GB scanned...Collecting files... found 77438 files, 57.0 GB
-found 77438 files
-Parallel hashing 54601 files (workers: 12)...
-Hashing: 1377/54601 files |Hashing: 2280/54601 files /Hashing: 4016/54601 files -Hashing: 5042/54601 files \Hashing: 6151/54601 files |Hashing: 7879/54601 files /Hashing: 11353/54601 files -Hashing: 14442/54601 files \Hashing: 16653/54601 files |Hashing: 18142/54601 files /Hashing: 19659/54601 files -Hashing: 21029/54601 files \Hashing: 22239/54601 files |Hashing: 23503/54601 files /Hashing: 26347/54601 files -Hashing: 29627/54601 files \Hashing: 32065/54601 files |Hashing: 33536/54601 files /Hashing: 35058/54601 files -Hashing: 36188/54601 files \Hashing: 37860/54601 files |Hashing: 38955/54601 files /Hashing: 40454/54601 files -Hashing: 42131/54601 files \Hashing: 42679/54601 files |Hashing: 43477/54601 files /Hashing: 44444/54601 files -Hashing: 44949/54601 files \Hashing: 46489/54601 files |Hashing: 50074/54601 files /Hashing: 50803/54601 files -Hashing: 51458/54601 files \Hashing: 53307/54601 files |Hashing: 53334/54601 files /Hashing: 53359/54601 files -Hashing: 53565/54601 files \Hashing: 53935/54601 files |Hashing: 53972/54601 files /Hashing: 54014/54601 files -Hashing: 54209/54601 files \Hashing: 54265/54601 files |Hashing: 54266/54601 files /Hashing: 54285/54601 files -Hashing: 54311/54601 files \Hashing: 54326/54601 files |Hashing: 54326/54601 files /Hashing: 54327/54601 files -Hashing: 54330/54601 files \Hashing: 54346/54601 files |Hashing: 54346/54601 files /Hashing: 54347/54601 files -Hashing: 54347/54601 files \Hashing: 54348/54601 files |Hashing: 54349/54601 files /Hashing: 54360/54601 files -Hashing: 54381/54601 files \Hashing: 54420/54601 files |Hashing: 54515/54601 files /Hashing: 54601/54601 files Completed in 58s
-Hashing completed in 58.723 seconds
-
---- File Type Analytics ---
-  docs      : 13464 files, 1869 duplicates
-  other     : 13583 files, 1714 duplicates
-  image     : 10968 files, 2226 duplicates
-  archive   : 485 files, 14 duplicates
-  media     : 1149 files, 150 duplicates
-  config    : 2840 files, 106 duplicates
-  source    : 33696 files, 1260 duplicates
-  data      : 164 files, 3 duplicates
-  firmware  : 262 files, 1 duplicates
-  binary    : 241 files, 2 duplicates
-  font      : 491 files, 298 duplicates
-  ide       : 95 files, 0 duplicates
-Analytics written to analytics_js.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 87.259 seconds
-  - 00:01:27.259
-Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json
-Delete script: duprm_js.sh
-./find_dups_rust/target/release/find_dups /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 17663 files, 12.7 GB scanned so far...Collecting files... 28200 files, 26.8 GB scanned so far...Collecting files... 32209 files, 27.2 GB scanned so far...Collecting files... 39353 files, 27.2 GB scanned so far...Collecting files... 48123 files, 47.3 GB scanned so far...Collecting files... 53742 files, 50.5 GB scanned so far...Collecting files... found 77438 files, 57.0 GB
-Parallel hashing 54601 files (workers: 12)...
-Hashing: 0/54601 files |Hashing: 1735/54601 files /Hashing: 2728/54601 files -Hashing: 4658/54601 files \Hashing: 5667/54601 files |Hashing: 6211/54601 files /Hashing: 7187/54601 files -Hashing: 8125/54601 files \Hashing: 9335/54601 files |Hashing: 11545/54601 files /Hashing: 13853/54601 files -Hashing: 14956/54601 files \Hashing: 15007/54601 files |Hashing: 15126/54601 files /Hashing: 15427/54601 files -Hashing: 15788/54601 files \Hashing: 16314/54601 files |Hashing: 16446/54601 files /Hashing: 16748/54601 files -Hashing: 17676/54601 files \Hashing: 18453/54601 files |Hashing: 21024/54601 files /Hashing: 22624/54601 files -Hashing: 24071/54601 files \Hashing: 26437/54601 files |Hashing: 26906/54601 files /Hashing: 28433/54601 files -Hashing: 29773/54601 files \Hashing: 32132/54601 files |Hashing: 34007/54601 files /Hashing: 35313/54601 files -Hashing: 37188/54601 files \Hashing: 38639/54601 files |Hashing: 40835/54601 files /Hashing: 42542/54601 files -Hashing: 44169/54601 files \Hashing: 44204/54601 files |Hashing: 44724/54601 files /Hashing: 44839/54601 files -Hashing: 46050/54601 files \Hashing: 48600/54601 files |Hashing: 51304/54601 files /Hashing: 53312/54601 files -Hashing: 53470/54601 files \Hashing: 53886/54601 files |Hashing: 54303/54601 files /Hashing: 54600/54601 files -
-Hashing completed in 46.722752785s
-Hashing: 54601/54601 files \
-
---- File Type Analytics ---
-  source        33696 files, 1260 duplicates
-  other         13583 files, 1710 duplicates
-  docs          13464 files, 1873 duplicates
-  image         10968 files, 2226 duplicates
-  config         2840 files, 106 duplicates
-  media          1149 files, 150 duplicates
-  font            491 files, 298 duplicates
-  archive         485 files, 14 duplicates
-  firmware        262 files, 1 duplicates
-  binary          241 files, 2 duplicates
-  data            164 files, 3 duplicates
-  ide              95 files, 0 duplicates
-Analytics written to analytics_rs.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 81.867 seconds
-  - 00:01:21.867
-Reports: duplicates_rs.csv, sort_dup_rs.csv, analytics_rs.json
-Delete script: duprm_rs.sh
-./find_dups_pthon/find_dups.py /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 9686 files, 19.6 GB scanned...Collecting files... 24608 files, 29.6 GB scanned...Collecting files... 35028 files, 33.8 GB scanned...Collecting files... 65613 files, 49.2 GB scanned...Collecting files... found 67348 files, 49.7 GB
-Collecting files... found 77438 files, 57.0 GB
-Parallel hashing 54601 files (workers: 12)...
-Hashing: 0/54601 files |Hashing: 1377/54601 files /Hashing: 1846/54601 files -Hashing: 4933/54601 files \Hashing: 7911/54601 files |Hashing: 9046/54601 files /Hashing: 10455/54601 files -Hashing: 10623/54601 files \Hashing: 12752/54601 files |Hashing: 15628/54601 files /Hashing: 18199/54601 files -Hashing: 18363/54601 files \Hashing: 18497/54601 files |Hashing: 20238/54601 files /Hashing: 21159/54601 files -Hashing: 22741/54601 files \Hashing: 26695/54601 files |Hashing: 30072/54601 files /Hashing: 33735/54601 files -Hashing: 37524/54601 files \Hashing: 41720/54601 files |Hashing: 46294/54601 files /Hashing: 51321/54601 files -Hashing: 54135/54601 files \Hashing: 54423/54601 files |Hashing: 54525/54601 files /Hashing: 54601/54601 files ✓
-Hashing completed in 27.327 seconds
-
---- File Type Analytics ---
-  archive         485 files, 14 duplicates
-  binary          241 files, 2 duplicates
-  config         2840 files, 106 duplicates
-  data            164 files, 3 duplicates
-  docs          13464 files, 1874 duplicates
-  firmware        262 files, 1 duplicates
-  font            491 files, 298 duplicates
-  ide             211 files, 48 duplicates
-  image         10968 files, 2226 duplicates
-  media          1149 files, 150 duplicates
-  other         13467 files, 1661 duplicates
-  source        33696 files, 1260 duplicates
-Analytics written to analytics_py.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 48.832 seconds
-  - 00:00:48.832
-Reports: duplicates_py.csv, sort_dup_py.csv, analytics_py.json
-Delete script: duprm_py.sh
-Collecting files... Collecting files... 25176 files, 26.5 GB scanned...Collecting files... 46896 files, 47.1 GB scanned...Collecting files... found 77438 files, 57.0 GB
-found 77438 files
-Parallel hashing 54601 files (workers: 12)...
-Hashing: 17064/54601 files |Hashing: 19825/54601 files /Hashing: 21975/54601 files -Hashing: 24845/54601 files \Hashing: 26269/54601 files |Hashing: 27342/54601 files /Hashing: 29016/54601 files -Hashing: 29146/54601 files \Hashing: 30434/54601 files |Hashing: 30961/54601 files /Hashing: 32164/54601 files -Hashing: 33577/54601 files \Hashing: 34224/54601 files |Hashing: 35842/54601 files /Hashing: 36314/54601 files -Hashing: 37058/54601 files \Hashing: 37430/54601 files |Hashing: 38129/54601 files /Hashing: 39981/54601 files -Hashing: 43792/54601 files \Hashing: 47274/54601 files |Hashing: 50726/54601 files /Hashing: 53585/54601 files -Hashing: 54601/54601 files 
-Hashing completed in 23.508 seconds
-
---- File Type Analytics ---
-  docs      : 13464 files, 1873 duplicates
-  other     : 13583 files, 1710 duplicates
-  data      : 164 files, 3 duplicates
-  image     : 10968 files, 2226 duplicates
-  media     : 1149 files, 150 duplicates
-  font      : 491 files, 298 duplicates
-  archive   : 485 files, 14 duplicates
-  config    : 2840 files, 106 duplicates
-  source    : 33696 files, 1260 duplicates
-  binary    : 241 files, 2 duplicates
-  firmware  : 262 files, 1 duplicates
-  ide       : 95 files, 0 duplicates
-Analytics written to analytics_bun.json
-
-Files scanned: 77438
-Duplicates found (files to delete): 7643
-Runtime:
-  - 36.446 seconds
-  - 00:00:36.446
-Reports: duplicates_bun.csv, sort_dup_bun.csv, analytics_bun.json
-Delete script: duprm_bun.sh
-./compar.sh: line 12: cd: find_dups_bun: No such file or directory
