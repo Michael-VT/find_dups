@@ -1,6 +1,7 @@
 find_dups_rust/target
 *.log
 *.log.*
+test_clean_*.txt
 report_*.txt
 *.csv
 *.sh
