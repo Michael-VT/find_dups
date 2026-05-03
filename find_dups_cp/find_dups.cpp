@@ -36,11 +36,80 @@ struct FileInfo {
 const size_t BUFFER_SIZE = 65536;
 const unsigned int NUM_WORKERS = std::thread::hardware_concurrency();
 
+// Progress tracker class
+class ProgressTracker {
+public:
+    ProgressTracker(size_t total, const std::string& item_name = "items")
+        : total_(total), processed_(0), item_name_(item_name), stop_flag_(false) {}
+
+    void start() {
+        start_time_ = std::chrono::steady_clock::now();
+        reporter_thread_ = std::thread([this]() {
+            while (!stop_flag_.load()) {
+                size_t current = processed_.load();
+                if (current >= total_) {
+                    break;
+                }
+
+                double percentage = (static_cast<double>(current) / total_) * 100.0;
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start_time_).count();
+                long eta = (current > 0) ? (elapsed * (total_ - current) / current) : 0;
+
+                const size_t bar_length = 40;
+                size_t filled = (bar_length * current) / total_;
+                std::string bar = std::string(filled, '=') + ">" + std::string(bar_length - filled - 1, ' ');
+
+                std::cout << "\r[" << bar << "] " << std::fixed << std::setprecision(1) << percentage << "% (" << current << "/" << total_ << " " << item_name_ << ") ETA: " << eta << "s" << std::flush;
+
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+        });
+    }
+
+    void increment() {
+        processed_.fetch_add(1);
+    }
+
+    void stop() {
+        stop_flag_.store(true);
+        if (reporter_thread_.joinable()) {
+            reporter_thread_.join();
+        }
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start_time_).count();
+        std::cout << "\r[" << std::string(40, '=') << "] 100.0% (" << total_ << "/" << total_ << " " << item_name_ << ") Completed in " << elapsed << "s" << std::endl;
+    }
+
+private:
+    size_t total_;
+    std::atomic<size_t> processed_;
+    std::string item_name_;
+    std::atomic<bool> stop_flag_;
+    std::chrono::steady_clock::time_point start_time_;
+    std::thread reporter_thread_;
+};
+
 std::string format_time(TimePoint tp) {
     auto tt = std::chrono::system_clock::to_time_t(tp);
     std::tm tm = *std::gmtime(&tt);
     std::ostringstream oss;
     oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S") << "Z";
+    return oss.str();
+}
+
+std::string formatSize(uint64_t bytes) {
+    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unit_index = 0;
+    double size = static_cast<double>(bytes);
+    
+    while (size >= 1024.0 && unit_index < 4) {
+        size /= 1024.0;
+        unit_index++;
+    }
+    
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1) << size << " " << units[unit_index];
     return oss.str();
 }
 
@@ -68,7 +137,7 @@ Hash compute_sha256(const Path& path) {
     return oss.str();
 }
 
-std::vector<FileInfo> collect_files(const std::vector<Path>& roots, uint64_t& scanned) {
+std::vector<FileInfo> collect_files(const std::vector<Path>& roots, std::atomic<uint64_t>& scanned, std::atomic<uint64_t>& total_bytes) {
     std::vector<FileInfo> files;
     uint64_t next_id = 1;
 
@@ -96,9 +165,9 @@ std::vector<FileInfo> collect_files(const std::vector<Path>& roots, uint64_t& sc
                     files.push_back({next_id++, path, size, sys_mtime, sys_mtime, ""});
                 }
                 scanned++;
+                total_bytes += size;
             }
         } catch (const fs::filesystem_error& e) {
-            std::cerr << "Warning: " << e.what() << std::endl;
         }
     }
     return files;
@@ -299,11 +368,33 @@ int main(int argc, char* argv[]) {
 
     auto start_total = std::chrono::steady_clock::now();
 
-    std::cout << "Collecting files... " << std::flush;
-    uint64_t scanned = 0;
-    auto all_files = collect_files(roots, scanned);
-    std::cout << "found " << scanned << " files" << std::endl;
-    if (scanned == 0) return 0;
+    std::atomic<uint64_t> scanned(0);
+    std::atomic<uint64_t> total_bytes(0);
+    
+    // Start file collection progress indicator
+    std::atomic<bool> stop_flag(false);
+    std::atomic<bool> stop_flag(false);
+    std::atomic<bool> first_output(true);
+    std::thread progress_thread([&]() {
+        while (!stop_flag.load()) {
+            uint64_t count = scanned.load();
+            uint64_t bytes = total_bytes.load();
+            if (count > 0) {
+                std::cout << "\rCollecting files... " << count << " files, " << formatSize(bytes) << " scanned..." << std::flush;
+            }
+            // Sleep for 5 seconds, but not on first iteration
+            if (!first_output.exchange(false)) {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+        }
+    });
+
+    auto all_files = collect_files(roots, scanned, total_bytes);
+    stop_flag.store(true);
+    if (progress_thread.joinable()) {
+        progress_thread.join();
+    }
+    std::cout << "\rCollecting files... found " << scanned << " files, " << formatSize(total_bytes.load()) << std::endl;
 
     auto by_size = group_by_size(all_files);
 
@@ -320,10 +411,11 @@ int main(int argc, char* argv[]) {
                   << " files (workers: " << NUM_WORKERS << ")..." << std::endl;
         auto start_hash = std::chrono::steady_clock::now();
 
-        auto hash_worker = [](std::vector<FileInfo*>* chunk) {
+        auto hash_worker = [](std::vector<FileInfo*>* chunk, ProgressTracker* prog) {
             for (auto* f : *chunk) {
                 f->hash = compute_sha256(f->path);
             }
+            prog->increment();
         };
 
         size_t chunk_size = (files_to_hash.size() + NUM_WORKERS - 1) / NUM_WORKERS;
@@ -332,12 +424,18 @@ int main(int argc, char* argv[]) {
             chunks.emplace_back(files_to_hash.begin() + i,
                                 files_to_hash.begin() + std::min(i + chunk_size, files_to_hash.size()));
         }
+
+        // Start progress tracker
+        ProgressTracker progress(chunks.size(), "chunks");
+        progress.start();
+
         std::vector<std::future<void>> futures;
         for (auto& chunk : chunks) {
-            futures.push_back(std::async(std::launch::async, hash_worker, &chunk));
+            futures.push_back(std::async(std::launch::async, hash_worker, &chunk, &progress));
         }
         for (auto& f : futures) f.get();
 
+        progress.stop();
         auto end_hash = std::chrono::steady_clock::now();
         std::chrono::duration<double> hash_elapsed = end_hash - start_hash;
         std::cout << "Hashing completed in " << hash_elapsed.count() << " seconds" << std::endl;
@@ -438,7 +536,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Runtime:\n";
     std::cout << "  - " << std::fixed << std::setprecision(3) << sec << " seconds\n";
     std::cout << "  - " << format_duration(sec) << std::endl;
-    std::cout << "Reports: duplicates_cpp.csv, sort_dup_cpp.csv\n";
+    std::cout << "Reports: duplicates_cpp.csv, sort_dup_cpp.csv, analytics_cpp.json\n";
     std::cout << "Delete script: duprm_cpp.sh\n";
 
     return 0;

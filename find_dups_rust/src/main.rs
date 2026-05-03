@@ -9,8 +9,95 @@ use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use chrono::{DateTime, Local};
 use rayon::prelude::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::thread;
+
+
+// ── Helper: format bytes ────────────────────────────────────────────────
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    const TB: u64 = GB * 1024;
+    
+    if bytes >= TB {
+        format!("{:.1} TB", bytes as f64 / TB as f64)
+    } else if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
+}
 
 const BUFFER_SIZE: usize = 65536;
+
+// ── Progress tracker ──────────────────────────────────────────────────
+struct ProgressTracker {
+    total: usize,
+    processed: Arc<AtomicUsize>,
+    item_name: String,
+}
+
+impl ProgressTracker {
+    fn new(total: usize, item_name: &str) -> Self {
+        Self {
+            total,
+            processed: Arc::new(AtomicUsize::new(0)),
+            item_name: item_name.to_string(),
+        }
+    }
+
+    fn start(&self) {
+        let processed = Arc::clone(&self.processed);
+        let total = self.total;
+        let item_name = self.item_name.clone();
+        let start_time = std::time::Instant::now();
+
+        thread::spawn(move || {
+            loop {
+                let current = processed.load(Ordering::Relaxed);
+                if current >= total {
+                    break;
+                }
+
+                let percentage = (current as f64 / total as f64) * 100.0;
+                let elapsed = start_time.elapsed().as_secs();
+                let eta = if current > 0 {
+                    (elapsed * (total - current) as u64) / current as u64
+                } else {
+                    0
+                };
+
+                let bar_length = 40;
+                let filled = (bar_length * current) / total;
+                let bar: String = "=".repeat(filled)
+                    + if filled < bar_length { ">" } else { "" }
+                    + &" ".repeat(bar_length - filled - 1);
+
+                print!("\r[{}] {:.1}% ({}/{}) ETA: {}s",
+                    bar, percentage, current, total, eta);
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+
+                thread::sleep(Duration::from_secs(5));
+            }
+        });
+    }
+
+    fn increment(&self) {
+        self.processed.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn stop(&self) {
+        let elapsed = std::time::Instant::now();
+        // The final status will be shown when the main thread prints the completion message
+    }
+}
 
 #[derive(Debug)]
 struct FileInfo {
@@ -241,11 +328,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let roots = &args[1..];
     let start_total = std::time::Instant::now();
-
     // ----- 1. Collect regular files -----
     let mut all_files = Vec::new();
     let mut next_id = 1;
     let mut scanned = 0;
+    
+    // Start file collection progress indicator
+    let collection_bytes = Arc::new(AtomicUsize::new(0));
+    let collection_counter = Arc::new(AtomicUsize::new(0));
+    let bytes_clone = Arc::clone(&collection_bytes);
+    let counter_clone = Arc::clone(&collection_counter);
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_clone = Arc::clone(&stop_flag);
+    
+    thread::spawn(move || {
+        while !stop_flag_clone.load(Ordering::Relaxed) {
+            let count = counter_clone.load(Ordering::Relaxed);
+            let bytes = bytes_clone.load(Ordering::Relaxed) as u64;
+            if count > 0 {
+                print!("\rCollecting files... {} files, {} scanned so far...", count, format_bytes(bytes));
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+            }
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
 
     for root in roots {
         for entry in WalkDir::new(root)
@@ -261,11 +368,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let size = metadata.len();
             if size == 0 { continue; } // skip zero-byte files
             scanned += 1;
+            collection_bytes.fetch_add(size as usize, Ordering::Relaxed);
+            collection_counter.store(scanned, Ordering::Relaxed);
             let path = entry.into_path();
             let modified = metadata.modified()?;
             let birth_sec = metadata.st_birthtime();
             let birth_nsec = metadata.st_birthtime_nsec();
-            let created = if birth_sec >= 0 && birth_nsec >= 0 {
+            let birth = if birth_sec >= 0 && birth_nsec >= 0 {
                 UNIX_EPOCH + Duration::new(birth_sec as u64, birth_nsec as u32)
             } else {
                 modified
@@ -275,14 +384,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 path,
                 size,
                 modified,
-                created,
+                created: birth,
                 hash: String::new(),
             });
             next_id += 1;
         }
     }
-
-    eprintln!("Collected {} files", scanned);
+    
+    stop_flag.store(true, Ordering::Relaxed);
+    let total_bytes = collection_bytes.load(Ordering::Relaxed) as u64;
+    println!("\rCollecting files... found {} files, {}", scanned, format_bytes(total_bytes));
     if scanned == 0 { return Ok(()); }
 
     // ----- 2. Group by size (indices) -----
@@ -302,25 +413,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let total_to_hash = files_to_hash.len();
     if total_to_hash > 0 {
-        eprintln!(
-            "Parallel hashing {} files (threads: {})...",
+        println!(
+            "Parallel hashing {} files (workers: {})...",
             total_to_hash,
             rayon::current_num_threads()
         );
         let start_hash = std::time::Instant::now();
 
+        // Start progress tracker
+        let progress = ProgressTracker::new(total_to_hash, "files");
+        progress.start();
+
         let hashes: Vec<(usize, String)> = files_to_hash
             .par_iter()
             .filter_map(|&idx| {
                 let path = &all_files[idx].path;
-                compute_sha256(path).ok().map(|h| (idx, h))
+                let result = compute_sha256(path).ok();
+                if result.is_some() {
+                    progress.increment();
+                }
+                result.map(|h| (idx, h))
             })
             .collect();
+
+        progress.stop();
 
         for (idx, hash) in hashes {
             all_files[idx].hash = hash;
         }
-        eprintln!("Hashing completed in {:?}", start_hash.elapsed());
+        println!("\nHashing completed in {:?}", start_hash.elapsed());
     }
 
     // ----- 4. Build duplicate groups -----

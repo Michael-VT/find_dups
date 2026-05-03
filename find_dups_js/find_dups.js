@@ -147,11 +147,32 @@ function formatDuration(seconds) {
     return `${h.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`;
 }
 
+// Format bytes into human-readable size
+function formatSize(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex++;
+    }
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
 // Recursive collection of regular files (no symlinks)
 async function collectFiles(roots) {
     const allFiles = [];
     let nextId = 1;
     let scanned = 0;
+    let totalSize = 0;
+
+    
+    // Start progress indicator
+    const progressInterval = setInterval(() => {
+        if (scanned > 0) {
+            process.stdout.write(`\rCollecting files... ${scanned} files, ${formatSize(totalSize)} scanned...`);
+        }
+    }, 5000);
 
     async function walk(dir) {
         let entries;
@@ -171,6 +192,8 @@ async function collectFiles(roots) {
                     if (!stat.isFile()) continue;
                     const size = stat.size;
                     if (size === 0) continue; // skip zero-byte files
+                    totalSize += size;
+
                     const modTime = stat.mtimeMs;
                     const birthTime = stat.birthtimeMs;
                     allFiles.push({
@@ -198,7 +221,50 @@ async function collectFiles(roots) {
             console.warn(`Warning: directory ${absoluteRoot} inaccessible: ${err.message}`);
         }
     }
-    return { allFiles, scanned };
+    
+    process.stdout.write(`\rCollecting files... found ${scanned} files, ${formatSize(totalSize)}\n`);
+    clearInterval(progressInterval);
+    return { allFiles, scanned, totalSize };
+}
+
+// Progress tracker class
+class ProgressTracker {
+    constructor(total, itemName = 'items') {
+        this.total = total;
+        this.processed = 0;
+        this.itemName = itemName;
+        this.startTime = Date.now();
+        this.intervalId = null;
+    }
+
+    start() {
+        this.intervalId = setInterval(() => {
+            if (this.processed >= this.total) {
+                this.stop();
+                return;
+            }
+            const percentage = (this.processed / this.total) * 100;
+            const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+            const eta = this.processed > 0 ? Math.floor((elapsed / this.processed) * (this.total - this.processed)) : 0;
+            const barLength = 40;
+            const filled = Math.floor(barLength * this.processed / this.total);
+            const bar = '='.repeat(filled) + '>' + ' '.repeat(barLength - filled - 1);
+            process.stdout.write(`\r[${bar}] ${percentage.toFixed(1)}% (${this.processed}/${this.total} ${this.itemName}) ETA: ${eta}s`);
+        }, 5000);
+    }
+
+    increment() {
+        this.processed++;
+    }
+
+    stop() {
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+        }
+        const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+        process.stdout.write(`\r[${'='.repeat(40)}] 100.0% (${this.total}/${this.total} ${this.itemName}) Completed in ${elapsed}s\n`);
+    }
 }
 
 // Parallel hashing via worker_threads
@@ -215,18 +281,28 @@ async function parallelHash(filesToHash) {
         chunks.push(filesToHash.slice(i, i + chunkSize));
     }
 
+    // Start progress tracker
+    const progress = new ProgressTracker(chunks.length, 'chunks');
+    progress.start();
+
+    // Track worker completion and increment progress
     const results = await Promise.all(chunks.map(chunk => {
         return new Promise((resolve, reject) => {
             const worker = new Worker(__filename, {
                 workerData: { chunk, type: 'hash' }
             });
-            worker.on('message', resolve);
+            worker.on('message', (result) => {
+                progress.increment();
+                resolve(result);
+            });
             worker.on('error', reject);
             worker.on('exit', (code) => {
                 if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
             });
         });
     }));
+
+    progress.stop();
 
     const hashMap = new Map();
     for (const resultChunk of results) {
@@ -353,7 +429,7 @@ async function main() {
     console.log(`Runtime:`);
     console.log(`  - ${elapsed.toFixed(3)} seconds`);
     console.log(`  - ${formatDuration(elapsed)}`);
-    console.log(`Reports: duplicates_js.csv, sort_dup_js.csv`);
+    console.log(`Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json`);
     console.log(`Delete script: duprm_js.sh`);
 }
 
@@ -361,3 +437,4 @@ main().catch(err => {
     console.error(err);
     process.exit(1);
 });
+

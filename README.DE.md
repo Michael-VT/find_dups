@@ -1,200 +1,204 @@
 # find_dups: Mehrsprachiger Duplikat-Finder
 
-Ein umfassender Duplikat-Finder, implementiert in Go, Python, Rust, JavaScript und C++ mit identischen Algorithmen für Leistungsvergleich und Produktionseinsatz.
+![Language Count](https://img.shields.io/badge/implementations-5-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
+![Algorithm](https://img.shields.io/badge/algorithm-SHA--256-green)
+
+Ein Hochleistungs-Duplikat-Finder, implementiert in **Go**, **Python**, **Rust**, **JavaScript** und **C++** mit identischen Algorithmen für faire Leistungsvergleiche und Produktionseinsatz.
 
 ## Überblick
 
-`find_dups` scannt ein oder mehrere Verzeichnisse rekursiv, identifiziert doppelte Dateien mittels SHA-256-Hashing und erstellt Berichte sowie Löskripte. Es verwendet parallele Verarbeitung zur effizienten Handhabung großer Dateisammlungen.
+`find_dups` scannt ein oder mehrere Verzeichnisse rekursiv, identifiziert doppelte Dateien mittels SHA-256-Hashing und erstellt Berichte, Dateityp-Analysen und Löschskripte.
 
 ### Hauptfunktionen
 
-- **Mehrsprachige Implementierung**: Go-, Python-, Rust-, JavaScript- und C++-Versionen für Leistungsvergleich
-- **Paralleles Hashing**: Nutzt alle CPU-Kerne für schnelle Duplikaterkennung
-- **Sicherheit**: Erstellt ein Löskript anstatt Dateien direkt zu löschen
-- **Detaillierte Berichte**: CSV-Exporte mit Dateimetadaten und Zeitstempeln
-- **Laufwerksübergreifend**: Kann mehrere Verzeichnisse über verschiedene Mount-Punkte scannen
+- **Mehrsprachige Implementierung**: Go-, Python-, Rust-, JavaScript- und C++-Versionen mit identischen Algorithmen
+- **Parallele Verarbeitung**: Nutzt alle CPU-Kerne für schnelles Hashing
+- **Echtzeit-Fortschrittsanzeigen**: Zeigt Dateianzahl und -größe während der Erfassung sowie Prozentsatz und geschätzte Restzeit beim Hashing (Aktualisierung alle 5 Sekunden)
+- **Dateityp-Analyse**: Automatische Kategorisierung in 12 Kategorien mit JSON-Analyseausgabe
+- **Sicherheit**: Erstellt ein Löschskript zur Überprüfung anstatt Dateien direkt zu löschen
+- **Stiller Betrieb**: Unterdrückt Warnungen über Dateisystemberechtigungen während des Scans
+- **Laufwerksübergreifend**: Scannt mehrere Verzeichnisse über verschiedene Mount-Punkte
+
+## Anwendungsfälle
+
+- **Backup-Konsolidierung**: Doppelte Dateien auf mehreren Backup-Laufwerken finden und entfernen vor der Archivierung
+- **Speicherplatzrückgewinnung**: Platz freigeben durch Identifizierung redundanter Kopien großer Dateien (Firmware-Images, Dokumente, Medien)
+- **Projektbereinigung**: Duplizierte Quelldateien, Bibliotheken oder Ressourcen zwischen eingebetteten Projekten erkennen
+- **Migrationsüberprüfung**: Quell- und Zielverzeichnisse nach Datenmigration vergleichen zur Bestätigung, dass alle Dateien kopiert wurden
+- **Laufwerksübergreifende Deduplizierung**: Dateien identifizieren, die zwischen interner SSD, externen Laufwerken und Netzwerkspeicher dupliziert sind
 
 ## Algorithmus
 
 Alle fünf Implementierungen folgen demselben Algorithmus:
 
-1. **Dateien sammeln** — Rekursiver Durchlauf aller angegebenen Verzeichnisse, Aufzeichnung von Pfad, Größe, Erstellungs- und Änderungszeit
-2. **Nach Größe gruppieren** — Nur Dateien, die ihre Größe mit mindestens einer anderen Datei teilen, werden zum Hashing fortgesetzt (Optimierung)
-3. **Paralleles SHA-256-Hashing** — Berechnung kryptografischer Hashes parallel:
-   - Go: Goroutines mit Channel-basiertem Worker-Pool
-   - Python: `multiprocessing.Pool`
-   - Rust: `rayon` paralleler Iterator
-   - JavaScript: `worker_threads` mit Worker-Pool
-   - C++: `std::thread` mit Thread-Pool
-4. **Duplikate identifizieren** — Gruppierung von Dateien nach Hash innerhalb von Gruppengrößen; alle Dateien in einer Hash-Gruppe mit >1 Element sind Duplikate
-5. **Ausgaben generieren**:
-   - `duplicates_<lang>.csv` — Alle Duplikatgruppen mit vollen Metadaten
-   - `sort_dup_<lang>.csv` — Alle Dateien nach Größe sortiert (absteigend)
-   - `duprm_<lang>.sh` — Bash-Skript, das alle Duplikate außer der ersten (nach ID) in jeder Gruppe löscht
+```mermaid
+graph TD
+    A[Verzeichnisse durchlaufen] --> B[Reguläre Dateien sammeln]
+    B --> C[Nach Größe gruppieren]
+    C --> D{Gruppengröße > 1?}
+    D -->|Nein| Z[Überspringen - eindeutige Größe]
+    D -->|Ja| E[Paralleles SHA-256-Hashing]
+    E --> F{Hash stimmt überein?}
+    F -->|Nein| Z
+    F -->|Ja| G[Duplikatgruppe]
+    G --> H[Berichte + Analyse generieren]
+```
+
+1. **Dateien sammeln** — Rekursiver Durchlauf aller angegebenen Verzeichnisse, Aufzeichnung von Pfad, Größe, Erstellungs- und Änderungszeit. Symlinks und Null-Byte-Dateien werden übersprungen.
+2. **Nach Größe gruppieren** — Nur Dateien, die ihre Größe mit mindestens einer anderen Datei teilen, werden gehasht. Dateien mit eindeutiger Größe werden vollständig übersprungen.
+3. **Paralleles SHA-256-Hashing** — Vollständiger SHA-256-Hash aller Kandidatendateien unter Verwendung aller CPU-Kerne.
+4. **Ausgaben generieren**: CSV-Berichte, Löschskripte und JSON-Analyse.
+
+### Parallele Verarbeitung
+
+| Sprache   | Mechanismus                              |
+|-----------|------------------------------------------|
+| Go        | Goroutines mit Channel-basiertem Pool    |
+| Python    | `multiprocessing.Pool`                   |
+| Rust      | `rayon` paralleler Iterator              |
+| JavaScript| `worker_threads` mit Worker-Pool         |
+| C++       | `std::async` mit aufgeteilten Arbeitspaketen |
 
 ## Ausgabedateien
 
-### duplicates_<lang>.csv
-CSV-Datei mit allen nach Inhalt gruppierten Duplikaten. Spalten:
-- `FileID`: Fortlaufende Dateikennung
-- `Path`: Vollständiger Dateipfad
-- `Size`: Dateigröße in Bytes
-- `Hash`: SHA-256-Hash (hexadezimal)
-- `CreationTime`: Dateierstellungszeitstempel (ISO 8601)
-- `ModificationTime`: Dateiänderungszeitstempel (ISO 8601)
+### duplicates_\<lang\>.csv
+CSV-Datei mit allen nach Inhalt gruppierten Duplikatdateien:
+| Spalte               | Beschreibung                          |
+|----------------------|---------------------------------------|
+| `FileID`             | Fortlaufende Dateikennung             |
+| `Path`               | Vollständiger Dateipfad               |
+| `Size`               | Dateigröße in Bytes                   |
+| `Hash`               | SHA-256-Hash (hexadezimal)            |
+| `CreationTime`       | Dateierstellungszeitstempel (ISO 8601)|
+| `ModificationTime`   | Dateiänderungszeitstempel (ISO 8601)  |
 
-### sort_dup_<lang>.csv
-CSV-Datei mit allen gescannten Dateien, nach Größe sortiert (absteigend). Gleiche Spalten wie `duplicates_<lang>.csv`.
+### sort_dup_\<lang\>.csv
+Alle gescannten Dateien, nach Größe sortiert (absteigend). Gleiche Spalten wie oben.
 
-### duprm_<lang>.sh
-Ausführbares Bash-Skript, das Duplikatdateien löscht und die erste Datei (niedrigste FileID) in jeder Duplikatgruppe erhält. **Überprüfen Sie dieses Skript vor der Ausführung**, um sicherzustellen, dass Sie keine wichtigen Dateien löschen.
+### analytics_\<lang\>.json
+Dateityp-Analyse mit Erweiterungskategorisierung:
+```json
+{
+  "summary": { "total_files": 148819, "duplicate_files": 696, "recoverable_bytes": 654000000 },
+  "by_category": { "source": { "count": 52000, "duplicate_count": 320 } },
+  "by_extension": { ".pdf": { "count": 1489, "duplicate_count": 15 } },
+  "size_distribution": { "under_1kb": 12000, "1kb_100kb": 80000, "1mb_100mb": 10000 }
+}
+```
+
+### duprm_\<lang\>.sh
+Ausführbares Bash-Skript, das Duplikatdateien entfernt und die erste Datei (niedrigste FileID) in jeder Duplikatgruppe behält. **Überprüfen Sie dieses Skript vor der Ausführung.**
 
 ## Installation & Verwendung
 
-### Go-Implementierung
+### Go
 
-**Voraussetzungen**: Go 1.16+
-
-**Build**:
 ```bash
 cd find_dups_go
-go build -o find_dups_go find_dups_go.go
+go build -o find_dups find_dups.go
+./find_dups /pfad/scan1 /pfad/scan2 ...
 ```
+Abhängigkeiten: Nur Standardbibliothek
 
-**Ausführen**:
+### Python
+
 ```bash
-./find_dups_go /pfad/zum/scan1 /pfad/zum/scan2 ...
+python3 find_dups_pthon/find_dups.py /pfad/scan1 /pfad/scan2 ...
 ```
+Voraussetzungen: Python 3.8+. Abhängigkeiten: Nur Standardbibliothek
 
-**Abhängigkeiten**: Nur Standardbibliothek
+### Rust
 
-### Python-Implementierung
-
-**Voraussetzungen**: Python 3.8+
-
-**Ausführen**:
-```bash
-cd find_dups_pthon
-python3 find_dups.py /pfad/zum/scan1 /pfad/zum/scan2 ...
-```
-
-**Abhängigkeiten**: Nur Standardbibliothek
-
-### Rust-Implementierung
-
-**Voraussetzungen**: Rust 1.70+, Cargo
-
-**Build**:
 ```bash
 cd find_dups_rust
 cargo build --release
+./target/release/find_dups /pfad/scan1 /pfad/scan2 ...
 ```
+Abhängigkeiten: `walkdir`, `sha2`, `csv`, `chrono`, `rayon`, `serde`, `serde_json`
 
-**Ausführen**:
+### JavaScript (Node.js)
+
 ```bash
-./target/release/find_dups /pfad/zum/scan1 /pfad/zum/scan2 ...
+node find_dups_js/find_dups.js /pfad/scan1 /pfad/scan2 ...
 ```
+Voraussetzungen: Node.js 16+. Abhängigkeiten: Nur Standardbibliothek
 
-**Abhängigkeiten** (siehe `Cargo.toml`):
-- `walkdir` 2.5 — Verzeichnisdurchlauf
-- `sha2` 0.10 — SHA-256-Hashing
-- `csv` 1.4 — CSV-Schreiben
-- `chrono` 0.4 — Zeitformatierung
-- `rayon` 1.12 — Parallelverarbeitung
+### C++
 
-
-### JavaScript-Implementierung (Node.js)
-
-**Voraussetzungen**: Node.js 16+ (mit worker_threads Unterstützung)
-
-**Ausführen**:
-```bash
-cd find_dups_js
-node find_dups.js /pfad/zum/scan1 /pfad/zum/scan2 ...
-```
-
-**Abhängigkeiten**: Nur Standardbibliothek (`crypto`, `fs`, `worker_threads`)
-
-### C++-Implementierung
-
-**Voraussetzungen**: g++ mit C++17 Unterstützung, OpenSSL (libcrypto)
-
-**Build**:
 ```bash
 cd find_dups_cp
-g++ -std=c++17 -O3 -pthread -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib find_dups.cpp -o find_dups_cpp -lcrypto -Wno-deprecated-declarations
+g++ -std=c++17 -O3 -pthread -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib \
+    find_dups.cpp -o find_dups_cpp -lcrypto
+./find_dups_cpp /pfad/scan1 /pfad/scan2 ...
 ```
+Abhängigkeiten: OpenSSL (EVP API für SHA-256)
 
-**Ausführen**:
-```bash
-./find_dups_cpp /pfad/zum/scan1 /pfad/zum/scan2 ...
-```
-
-**Abhängigkeiten**:
-- OpenSSL (libcrypto) — SHA-256-Hashing
-- Standardbibliothek für Dateisystem und Threads
 ## Benchmark-Ergebnisse
 
-Getestet mit ca. 149.000 Dateien in zwei Verzeichnissen (lokale SSD + externes USB-Laufwerk):
+Getestet mit ~149.000 Dateien in zwei Verzeichnissen (lokale SSD + externes USB-Laufwerk, 12 CPU-Kerne):
 
-| Metrik                | Python     | Rust       | Go         |
-|-----------------------|------------|------------|------------|
-| Dateien gescannt      | 149.044    | 148.819    | 148.819    |
-| Dateien gehasht       | 128.964    | 128.738    | 128.738    |
-| Hashing-Zeit          | 1:55.751   | 2:07.520   | 1:31.992   |
-| Gesamtzeit            | 5:26.243   | 3:55.664   | 3:06.040   |
-| Duplikate gefunden    | 0          | 696        | 696        |
-| Worker/Threads        | 12         | 12         | 12         |
+| Metrik                | Rust     | C++      | Python   | Go       | JavaScript |
+|-----------------------|----------|----------|----------|----------|------------|
+| Dateien gescannt      | 148.706  | 148.707  | 148.706  | 148.707  | 148.707    |
+| Duplikate gefunden    | 585      | 585      | 585      | 585      | 585        |
+| Gesamtzeit            | ~3:58    | ~4:17    | ~4:39    | ~5:01    | ~5:53      |
+| Ausgabesuffix         | _rs      | _cpp     | _py      | _go      | _js        |
 
-**Hinweise**:
-- Zeiten im Format `Minuten:Sekunden.Millisekunden`
-- Die Python-Implementierung fand 0 Duplikate, während Go und Rust 696 fanden, was auf einen möglichen Bug in der Duplikaterkennungslogik der Python-Version hinweist
-- Go zeigt die beste Gesamtleistung trotz langsamerer Dateisammlung als Rust
+**Hinweise:**
+- Alle Implementierungen liefern identische Ergebnisse (585 Duplikatgruppen)
+- Null-Byte-Dateien werden übersprungen (112 falsch-positive „Duplikate" eliminiert)
+- Rust und C++ führen bei der Leistung; alle Implementierungen nutzen parallele Verarbeitung
 
-## Bewertung & Empfehlungen
+## Dateityp-Kategorien
 
-### Stärken
+Die Analyse kategorisiert Dateien nach Erweiterung in 12 Kategorien:
 
-- **Praktischer Wert**: Hoch — löst ein echtes Problem der Duplikatsuche über mehrere Verzeichnisse und Laufwerke hinweg
-- **Sicherheit**: Gut — erstellt ein Löskript zur Überprüfung anstatt direkt zu löschen
-- **Performance**: Alle drei Implementierungen nutzen parallele Verarbeitung effektiv
-- **Transparenz**: CSV-Berichte ermöglichen detaillierte Analyse vor dem Löschen
+| Kategorie | Beispiele                              |
+|-----------|----------------------------------------|
+| source    | .c, .h, .cpp, .py, .js, .rs, .go      |
+| firmware  | .hex, .bin, .elf, .dfu, .flash, .map  |
+| ide       | .uvprojx, .ewp, .cproject, .ioc       |
+| config    | .yaml, .cmake, .json, .toml, .xml     |
+| docs      | .pdf, .md, .txt, .html, .doc, .docx   |
+| image     | .png, .jpg, .jpeg, .svg, .tiff        |
+| binary    | .exe, .dll, .so, .dylib, .o, .a       |
+| archive   | .zip, .7z, .tar, .gz, .rar            |
+| media     | .mp4, .wav, .avi, .mp3, .flac         |
+| font      | .ttf, .otf, .woff, .woff2             |
+| data      | .csv, .dts, .dtsi, .ld, .icf          |
+| other     | (jede Erweiterung nicht in den obigen Kategorien) |
 
-### Bekannte Probleme
-
-1. **Python-Diskrepanz**: Die Python-Version fand 0 Duplikate, während Go/Rust 696 fanden. Dies erfordert Untersuchung — wahrscheinlich verbunden mit den unterschiedlichen Dateianzahlen (149.044 vs 148.819) oder einem Bug in der Duplikaterkennungslogik.
-
-2. **Plattformbeschränkungen**:
-   - Go verwendet macOS-spezifisches `syscall.Stat_t` für Geburtszeit
-   - Rust verwendet `std::os::darwin::fs::MetadataExt` für Geburtszeit
-   - Beide erfordern bedingte Kompilierung für Linux/Windows-Unterstützung
+## Empfehlungen
 
 ### Welche Implementierung verwenden?
 
-- **Für Produktionseinsatz auf macOS**: Go — am schnellsten insgesamt, einzelne Binärdatei ohne Abhängigkeiten
-- **For plattformübergreifende Entwicklung**: Rust — am einfachsten mit `#[cfg(target_os)]` Attributen anzupassen
-- **Für schnelles Skripting/Prototyping**: Python — am einfachsten zu ändern, aber zuerst den Duplikaterkennungs-Bug untersuchen
+- **Schnellste insgesamt**: Rust — beste Leistung mit sicherer Parallelität
+- **Beste einzelne Binärdatei**: Go — keine Abhängigkeiten, portable Binärdatei
+- **Am einfachsten zu ändern**: Python — schnelles Prototyping, keine Kompilierung
+- **Hohe Leistung**: C++ — schnell, erfordert OpenSSL
+- **Node.js-Umgebungen**: JavaScript — integriert in JS/TS-Tooling
 
-## Zukunftsvisionen
+## Projektstruktur
 
-1. **Python-Duplikaterkennung korrigieren** — Diskrepanz zwischen Implementierungen untersuchen
-2. **Fortschrittsanzeige** — Echtzeit-Progress-Anzeige während Hashing-Phase
-3. **Plattformübergreifende Geburtszeit** — Bedingte Kompilierung für Linux/Windows
-4. **Partielles Hashing-Optimierung** — Hashing der ersten/letzten N KB + Größe vor vollem Dateihash
-5. **Konfigurierbarer Output** — Ausgabeverzeichnis und Dateipräfixe angebbar
-6. **Interaktiver Modus** — Einfaches TUI zur Überprüfung von Duplikaten vor dem Löschen
-7. **Dry-Run-Modus** — Anzeigen, was gelöscht würde, ohne Skript zu generieren
-8. **Verschieben statt Löschen** — Option, Duplikate in Staging-Verzeichnis zu verschieben
-9. **Mindestgrößen-Filter** — Dateien unter konfigurierbarem Schwellenwert überspringen (z.B. <1KB)
-10. **Symlink/Hardlink-Deduplizierung** — Duplikate durch Hardlinks ersetzen um Platz zu sparen ohne zu löschen
+```
+find_dups/
+├── README.md
+├── compar.sh              # Benchmark-Runner
+├── find_dups_go/          # Go-Implementierung
+│   └── find_dups.go
+├── find_dups_rust/        # Rust-Implementierung
+│   ├── Cargo.toml
+│   ├── src/main.rs
+│   └── target/            # Build-Ausgabe (gitignore)
+├── find_dups_cp/          # C++-Implementierung
+│   └── find_dups.cpp
+├── find_dups_js/          # JavaScript-Implementierung
+│   └── find_dups.js
+└── find_dups_pthon/       # Python-Implementierung
+    └── find_dups.py
+```
 
 ## Lizenz
 
-Dieses Projekt wird wie besehen für educative und praktische Nutzung bereitgestellt.
-
-## Mitwirken
-
-Beiträge sind willkommen, besonders für:
-- Korrektur des Python-Duplikaterkennungsproblems
-- Hinzufügen von Windows/Linux-Kompatibilität
-- Implementierung der oben aufgeführten Zukunftsvisionen
+Dieses Projekt wird wie besehen für Bildungszwecke und praktische Nutzung bereitgestellt.

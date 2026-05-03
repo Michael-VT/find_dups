@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -65,6 +66,64 @@ var categoryMap = map[string]string{
 
 	".csv": "data", ".dts": "data", ".dtsi": "data", ".overlay": "data",
 	".ld": "data", ".icf": "data", ".srec": "data",
+}
+
+// ProgressTracker tracks and displays progress every 5 seconds
+type ProgressTracker struct {
+	total      int64
+	processed  int64
+	itemName   string
+	startTime  time.Time
+	stopChan   chan struct{}
+}
+
+func NewProgressTracker(total int, itemName string) *ProgressTracker {
+	return &ProgressTracker{
+		total:     int64(total),
+		processed: 0,
+		itemName:  itemName,
+		startTime: time.Now(),
+		stopChan:  make(chan struct{}),
+	}
+}
+
+func (pt *ProgressTracker) Start() {
+	ticker := time.NewTicker(5 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				current := atomic.LoadInt64(&pt.processed)
+				if current >= pt.total {
+					return
+				}
+				percentage := float64(current) / float64(pt.total) * 100.0
+				elapsed := int(time.Since(pt.startTime).Seconds())
+				var eta int
+				if current > 0 {
+					eta = int(float64(elapsed) / float64(current) * float64(pt.total-current))
+				} else {
+					eta = 0
+				}
+				barLength := 40
+				filled := int(int64(barLength) * current / pt.total)
+				bar := strings.Repeat("=", filled) + ">" + strings.Repeat(" ", barLength-filled-1)
+				fmt.Printf("\r[%s] %.1f%% (%d/%d %s) ETA: %ds", bar, percentage, current, pt.total, pt.itemName, eta)
+			case <-pt.stopChan:
+				return
+			}
+		}
+	}()
+}
+
+func (pt *ProgressTracker) Increment() {
+	atomic.AddInt64(&pt.processed, 1)
+}
+
+func (pt *ProgressTracker) Stop() {
+	close(pt.stopChan)
+	elapsed := int(time.Since(pt.startTime).Seconds())
+	fmt.Printf("\r[%s] 100.0%% (%d/%d %s) Completed in %ds\n", strings.Repeat("=", 40), pt.total, pt.total, pt.itemName, elapsed)
 }
 
 func getCategory(ext string) string {
@@ -237,27 +296,16 @@ func generateAnalytics(allFiles []FileInfo, bySize map[int64][]*FileInfo, elapse
 	}
 
 	// Human-readable summary
-	fmt.Println("\n=== File Type Analytics ===")
-	fmt.Printf("Total files: %d (%s)\n", len(allFiles), humanBytes(totalSize))
-	fmt.Printf("Duplicates:  %d (%s recoverable)\n", len(dupSet), humanBytes(dupSize))
-	fmt.Println()
-	fmt.Println("By category:")
+	fmt.Println("\n--- File Type Analytics ---")
 	for _, cat := range sortedKeys(byCategory) {
 		entry := byCategory[cat].(map[string]interface{})
-		fmt.Printf("  %-12s %5d files  %10s  (%d dups, %s)\n",
+		fmt.Printf("  %-12s %5d files, %d duplicates\n",
 			cat,
 			entry["count"].(int),
-			humanBytes(entry["total_bytes"].(int64)),
 			entry["duplicate_count"].(int),
-			humanBytes(entry["duplicate_bytes"].(int64)),
 		)
 	}
-	fmt.Println()
-	fmt.Println("Size distribution:")
-	for _, bin := range []string{"0_bytes", "under_1kb", "1kb_100kb", "100kb_1mb", "1mb_100mb", "over_100mb"} {
-		fmt.Printf("  %-12s %d\n", bin, sizeDist[bin])
-	}
-	fmt.Println("\nAnalytics written to analytics_go.json")
+	fmt.Println("Analytics written to analytics_go.json")
 }
 
 func humanBytes(b int64) string {
@@ -278,6 +326,23 @@ func humanBytes(b int64) string {
 	}
 }
 
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+	)
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
 func sortedKeys(m map[string]interface{}) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -296,10 +361,40 @@ func main() {
 
 	startTotal := time.Now()
 
-	// ----- 1. Collect regular files (no symlinks) -----
+// ----- 1. Collect regular files (no symlinks) -----
 	var allFiles []FileInfo
 	var scanned int
+	var totalSize int64
 	var nextID = 1
+	
+	// Progress update struct
+	type progressUpdate struct {
+		count int
+		size  int64
+	}
+	
+	// Start file collection progress indicator
+	progressChan := make(chan progressUpdate, 1)
+	stopChan := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		lastCount := 0
+		lastSize := int64(0)
+		for {
+			select {
+			case update := <-progressChan:
+				lastCount = update.count
+				lastSize = update.size
+			case <-ticker.C:
+				if lastCount > 0 {
+					fmt.Printf("\rCollecting files... %d files, %s scanned...", lastCount, formatSize(lastSize))
+				}
+			case <-stopChan:
+				return
+			}
+		}
+	}()
 
 	for _, root := range roots {
 		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -328,6 +423,8 @@ func main() {
 				birthTime = modTime
 			}
 			scanned++
+			totalSize += size
+			progressChan <- progressUpdate{count: scanned, size: totalSize}
 			allFiles = append(allFiles, FileInfo{
 				ID:      nextID,
 				Path:    path,
@@ -342,7 +439,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Walk error %s: %v\n", root, err)
 		}
 	}
-	fmt.Printf("Collected %d files\n", scanned)
+	
+	close(stopChan)
+	fmt.Printf("\rCollecting files... found %d files, %s\n", scanned, formatSize(totalSize))
 	if scanned == 0 {
 		return
 	}
@@ -365,6 +464,10 @@ func main() {
 		fmt.Printf("Parallel hashing %d files (workers: %d)...\n", totalToHash, runtime.NumCPU())
 		startHash := time.Now()
 
+		// Start progress tracker
+		progress := NewProgressTracker(totalToHash, "files")
+		progress.Start()
+
 		jobs := make(chan *FileInfo, totalToHash)
 		var wg sync.WaitGroup
 		for w := 0; w < runtime.NumCPU(); w++ {
@@ -378,6 +481,7 @@ func main() {
 						continue
 					}
 					f.Hash = hash
+					progress.Increment()
 				}
 			}()
 		}
@@ -386,6 +490,7 @@ func main() {
 		}
 		close(jobs)
 		wg.Wait()
+		progress.Stop()
 		fmt.Printf("Hashing completed in %v\n", time.Since(startHash))
 	}
 

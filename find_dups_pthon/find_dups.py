@@ -7,12 +7,67 @@ import hashlib
 import csv
 import json
 import time
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, Value
 from collections import defaultdict
-
+import threading
+import queue
 BUFFER_SIZE = 64 * 1024
 NUM_WORKERS = cpu_count()
 
+class ProgressTracker:
+    """Thread-safe progress tracker that displays progress every 5 seconds."""
+    def __init__(self, total_items, item_name="files"):
+        self.total_items = total_items
+        self.processed = 0
+        self.item_name = item_name
+        self.lock = threading.Lock()
+        self.start_time = time.time()
+        self.stop_event = threading.Event()
+        self.thread = None
+
+    def _progress_reporter(self):
+        """Background thread that reports progress every 5 seconds."""
+        while not self.stop_event.is_set():
+            with self.lock:
+                if self.processed >= self.total_items:
+                    break
+                percentage = (self.processed / self.total_items) * 100
+                elapsed = time.time() - self.start_time
+                if self.processed > 0:
+                    eta = (elapsed / self.processed) * (self.total_items - self.processed)
+                else:
+                    eta = 0
+                bar_length = 40
+                filled = int(bar_length * self.processed / self.total_items)
+                bar = '=' * filled + '>' + ' ' * (bar_length - filled - 1)
+                print(f"\r[{bar}] {percentage:.1f}% ({self.processed}/{self.total_items} {self.item_name}) ETA: {int(eta)}s", end='', flush=True)
+
+            self.stop_event.wait(5)
+
+    def start(self):
+        """Start the progress reporter thread."""
+        if self.total_items > 0:
+            self.thread = threading.Thread(target=self._progress_reporter, daemon=True)
+            self.thread.start()
+
+    def increment(self, amount=1):
+        """Increment the processed count."""
+        with self.lock:
+            self.processed += amount
+
+    def stop(self):
+        """Stop the progress reporter and show final status."""
+        self.stop_event.set()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1)
+        elapsed = time.time() - self.start_time
+        print(f"\r[{'=' * 40}] 100.0% ({self.total_items}/{self.total_items} {self.item_name}) Completed in {int(elapsed)}s")
+def is_regular_file(path):
+    try:
+        st = os.lstat(path)
+        return (st.st_mode & 0o170000) == 0o100000  # S_IFREG
+    except OSError:
+        return False
 EXTENSION_CATEGORIES = {
     '.c': 'source', '.h': 'source', '.cpp': 'source', '.hpp': 'source',
     '.cc': 'source', '.cxx': 'source', '.m': 'source', '.mm': 'source',
@@ -52,7 +107,70 @@ def is_regular_file(path):
     except OSError:
         return False
 
-def collect_files(roots):
+def format_size(bytes_count):
+    """Format bytes count to human-readable size."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_count < 1024.0:
+            return f"{bytes_count:.1f} {unit}"
+        bytes_count /= 1024.0
+    return f"{bytes_count:.1f} PB"
+
+class CollectionProgressTracker:
+    """Shows file collection progress every 5 seconds."""
+    def __init__(self):
+        self.count = 0
+        self.total_size = 0
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.thread = None
+        self.update_queue = queue.Queue()
+
+    def _reporter(self):
+        """Background thread that reports progress every 5 seconds."""
+        while not self.stop_event.is_set():
+            # Process all pending updates
+            try:
+                while True:
+                    count, size = self.update_queue.get_nowait()
+                    with self.lock:
+                        self.count = count
+                        self.total_size = size
+            except queue.Empty:
+                pass
+            
+            with self.lock:
+                current_count = self.count
+                current_size = self.total_size
+            if current_count > 0:
+                size_str = format_size(current_size)
+                print(f"\rCollecting files... {current_count} files, {size_str} scanned...", end='', flush=True)
+            self.stop_event.wait(5)
+
+    def start(self):
+        """Start the progress reporter thread."""
+        self.thread = threading.Thread(target=self._reporter, daemon=True)
+        self.thread.start()
+
+    def add_file(self, size):
+        """Add a file with its size to the counter."""
+        with self.lock:
+            self.count += 1
+            self.total_size += size
+        # Queue update for reporter thread
+        self.update_queue.put((self.count, self.total_size))
+
+    def stop(self):
+        """Stop the progress reporter and show final status."""
+        self.stop_event.set()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1)
+        count, total_size = self.count, self.total_size
+        size_str = format_size(total_size)
+        print(f"\rCollecting files... found {count} files, {size_str}")
+
+
+
+def collect_files(roots, progress_tracker=None):
     files = []
     next_id = 1
     for root in roots:
@@ -79,6 +197,8 @@ def collect_files(roots):
                         'hash': None
                     })
                     next_id += 1
+                    if progress_tracker:
+                        progress_tracker.add_file(st.st_size)
     return files
 
 def compute_sha256(args):
@@ -195,22 +315,11 @@ def generate_analytics(all_files, dup_groups, elapsed):
         json.dump(analytics, jf, indent=2)
 
     # Print human-readable summary
-    print("\n--- Analytics Summary ---")
-    print(f"Total files: {len(all_files)}  |  Total size: {total_size:,} bytes")
-    print(f"Duplicate files (to delete): {len(dup_ids)}  |  Recoverable: {dup_size:,} bytes")
-    print(f"Scan duration: {elapsed:.3f}s")
-    print("\nBy category:")
+    print("\n--- File Type Analytics ---")
     for cat in sorted(by_cat):
         c = by_cat[cat]
-        print(f"  {cat:12s}  {c['count']:6d} files  {c['total_bytes']:>14,} bytes  "
-              f"({c['duplicate_count']} dups, {c['duplicate_bytes']:,} bytes)")
-    print("\nBy extension (top 15 by count):")
-    sorted_exts = sorted(by_ext.items(), key=lambda x: x[1]['count'], reverse=True)[:15]
-    for ext, edata in sorted_exts:
-        print(f"  {ext:12s}  {edata['count']:6d} files  {edata['total_bytes']:>14,} bytes  "
-              f"({edata['duplicate_count']} dups)")
-    print(f"\nSize distribution: {dict(size_bins)}")
-    print("Analytics saved: analytics_py.json")
+        print(f"  {cat:12s} {c['count']:6d} files, {c['duplicate_count']} duplicates")
+    print("Analytics written to analytics_py.json")
 
 def main():
     if len(sys.argv) < 2:
@@ -220,10 +329,16 @@ def main():
     start_total = time.time()
     roots = sys.argv[1:]
 
-    print("Collecting files...", end=' ', flush=True)
-    all_files = collect_files(roots)
+    # Start file collection progress tracker
+    collection_progress = CollectionProgressTracker()
+    collection_progress.start()
+    
+    all_files = collect_files(roots, collection_progress)
+    collection_progress.stop()
+    
     total_scanned = len(all_files)
-    print(f"found {total_scanned} files")
+    total_size = sum(f['size'] for f in all_files)
+    print(f"Collecting files... found {total_scanned} files, {format_size(total_size)}")
     if total_scanned == 0:
         return
 
@@ -245,20 +360,31 @@ def main():
 
         chunk_size = max(1, total_to_hash // (NUM_WORKERS * 4))
         chunks = [files_to_hash[i:i+chunk_size] for i in range(0, total_to_hash, chunk_size)]
+        total_chunks = len(chunks)
 
-        with Pool(NUM_WORKERS) as pool:
-            results = pool.map(parallel_hash_chunk, chunks)
+        # Start progress tracker
+        progress = ProgressTracker(total_chunks, "chunks")
+        progress.start()
 
-        # Apply hashes from workers
+        # Use imap_unordered to get results as they complete
         hash_map = {}
-        for chunk_result in results:
-            for fid, fhash in chunk_result:
-                hash_map[fid] = fhash
+        with Pool(NUM_WORKERS) as pool:
+            for chunk_result in pool.imap_unordered(parallel_hash_chunk, chunks):
+                # Apply hashes from this chunk
+                for fid, fhash in chunk_result:
+                    hash_map[fid] = fhash
+                # Update progress
+                progress.increment()
+
+        # Stop progress tracker
+        progress.stop()
+
+        # Apply remaining hashes
         for f in files_to_hash:
             if f['id'] in hash_map:
                 f['hash'] = hash_map[f['id']]
 
-        print(f"Hashing completed in {format_duration(time.time() - start_hash)}")
+        print(f"Hashing completed in {time.time() - start_hash:.3f} seconds")
 
     # Build duplicate groups
     dup_groups = []
@@ -313,7 +439,7 @@ def main():
     print(f"Runtime:")
     print(f"  - {elapsed:.3f} seconds")
     print(f"  - {format_duration(elapsed)}")
-    print("Reports: duplicates_py.csv, sort_dup_py.csv")
+    print("Reports: duplicates_py.csv, sort_dup_py.csv, analytics_py.json")
     print("Delete script: duprm_py.sh")
 
 if __name__ == '__main__':

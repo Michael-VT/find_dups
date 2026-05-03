@@ -4,20 +4,28 @@
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![Algorithm](https://img.shields.io/badge/algorithm-SHA--256-green)
 
-A high-performance duplicate file finder implemented in **Go**, **Python**, **Rust**, **JavaScript**, and **C++** with identical algorithms for performance comparison and production use.
+A high-performance duplicate file finder implemented in **Go**, **Python**, **Rust**, **JavaScript**, and **C++** with identical algorithms for fair performance comparison and production use.
 
 ## Overview
 
-`find_dups` scans one or more directories recursively, identifies duplicate files using a multi-pass SHA-256 hashing strategy, and generates reports, analytics, and deletion scripts.
+`find_dups` scans one or more directories recursively, identifies duplicate files using SHA-256 content hashing, and generates reports, file type analytics, and deletion scripts.
 
 ### Key Features
 
 - **Multi-language implementation**: Go, Python, Rust, JavaScript, and C++ versions with identical algorithms
-- **Multi-pass hashing**: Quick hash (first 4KB) → Full SHA-256 — skips hashing when files differ early
-- **Parallel processing**: Utilizes all CPU cores for fast duplicate detection
-- **File type analytics**: Automatic categorization and JSON analytics output
+- **Parallel processing**: Utilizes all CPU cores for fast hashing
+- **Real-time progress indicators**: Shows file count and size during collection, plus percentage and ETA during hashing (updates every 5 seconds)
+- **File type analytics**: Automatic categorization into 12 categories with JSON analytics output
 - **Safety**: Generates a deletion script for review rather than deleting files directly
 - **Cross-drive support**: Scans multiple directories across different mount points
+
+## Use Cases
+
+- **Backup consolidation**: Find and remove duplicate files across multiple backup drives before archiving
+- **Disk space recovery**: Reclaim space by identifying redundant copies of large files (firmware images, documents, media)
+- **Project cleanup**: Detect duplicated source files, libraries, or assets across embedded projects and repositories
+- **Migration verification**: Compare source and destination directories after data migration to confirm all files were copied
+- **Cross-drive deduplication**: Identify files duplicated between internal SSD, external drives, and network storage
 
 ## Algorithm
 
@@ -37,8 +45,8 @@ graph TD
 ```
 
 1. **Collect files** — Recursive walk through all specified directories, recording path, size, birth time, and modification time. Skips symlinks and zero-byte files.
-2. **Group by size** — Only files sharing a size with at least one other file proceed to hashing.
-3. **Parallel hash** — Full SHA-256 hash of all candidate files using all CPU cores.
+2. **Group by size** — Only files sharing a size with at least one other file proceed to hashing. Files with unique sizes are skipped entirely.
+3. **Parallel SHA-256 hash** — Full SHA-256 hash of all candidate files using all CPU cores.
 4. **Generate outputs**: CSV reports, deletion scripts, and JSON analytics.
 
 ### Parallel Processing
@@ -49,7 +57,7 @@ graph TD
 | Python     | `multiprocessing.Pool`              |
 | Rust       | `rayon` parallel iterator           |
 | JavaScript | `worker_threads` with Worker pool   |
-| C++        | `std::thread` with `std::async`     |
+| C++        | `std::async` with chunked workloads |
 
 ## Output Files
 
@@ -133,42 +141,62 @@ Tested on ~149,000 files across two directories (local SSD + external USB drive,
 |-----------------------|----------|----------|----------|----------|------------|
 | Files scanned         | 148,706  | 148,707  | 148,706  | 148,707  | 148,707    |
 | Duplicates found      | 585      | 585      | 585      | 585      | 585        |
-| Recoverable space     | —        | —        | —        | 345.8 MB | —          |
 | Total time            | ~3:58    | ~4:17    | ~4:39    | ~5:01    | ~5:53      |
 | Output suffix         | _rs      | _cpp     | _py      | _go      | _js        |
 
 **Notes:**
 - All implementations produce identical results (585 duplicate groups)
-- Zero-byte files are skipped (112 false-positive "duplicates" eliminated vs. older versions)
+- Zero-byte files are skipped (112 false-positive "duplicates" eliminated)
 - Rust and C++ lead performance; all implementations use parallel processing
 
 ## File Type Categories
 
-Analytics categorize files by extension into:
+Analytics categorize files by extension into 12 categories:
 
-| Category  | Examples                          |
-|-----------|-----------------------------------|
-| source    | .c, .h, .cpp, .py, .js, .rs, .go |
-| firmware  | .hex, .bin, .elf, .dfu            |
-| ide       | .uvprojx, .ewp, .cproject         |
-| config    | .yaml, .cmake, .json, .toml       |
-| docs      | .pdf, .md, .txt, .html            |
-| image     | .png, .jpg, .svg                  |
-| binary    | .exe, .dll, .so, .a               |
-| archive   | .zip, .7z, .tar, .gz              |
-| media     | .mp4, .wav, .mp3                  |
-| font      | .ttf, .otf, .woff                 |
-| data      | .csv, .xml, .dts                  |
+| Category  | Examples                              |
+|-----------|---------------------------------------|
+| source    | .c, .h, .cpp, .py, .js, .rs, .go     |
+| firmware  | .hex, .bin, .elf, .dfu, .flash, .map |
+| ide       | .uvprojx, .ewp, .cproject, .ioc      |
+| config    | .yaml, .cmake, .json, .toml, .xml    |
+| docs      | .pdf, .md, .txt, .html, .doc, .docx  |
+| image     | .png, .jpg, .jpeg, .svg, .tiff       |
+| binary    | .exe, .dll, .so, .dylib, .o, .a      |
+| archive   | .zip, .7z, .tar, .gz, .rar           |
+| media     | .mp4, .wav, .avi, .mp3, .flac        |
+| font      | .ttf, .otf, .woff, .woff2            |
+| data      | .csv, .dts, .dtsi, .ld, .icf         |
+| other     | (any extension not in above categories) |
 
 ## Recommendations
 
 ### Which implementation to use?
 
-- **Fastest overall**: Rust (~3:58) — best performance with safe concurrency
-- **Best single binary**: Go (~5:01) — no dependencies, portable binary
-- **Easiest to modify**: Python (~4:39) — quick prototyping
-- **High performance**: C++ (~4:17) — fast, requires OpenSSL
-- **Node.js environments**: JavaScript (~5:53) — integrates with JS/TS tooling
+- **Fastest overall**: Rust — best performance with safe concurrency
+- **Best single binary**: Go — no dependencies, portable binary
+- **Easiest to modify**: Python — quick prototyping, no compilation
+- **High performance**: C++ — fast, requires OpenSSL
+- **Node.js environments**: JavaScript — integrates with JS/TS tooling
+
+## Project Structure
+
+```
+find_dups/
+├── README.md
+├── compar.sh              # Benchmark runner
+├── find_dups_go/          # Go implementation
+│   └── find_dups.go
+├── find_dups_rust/        # Rust implementation
+│   ├── Cargo.toml
+│   ├── src/main.rs
+│   └── target/            # Build output (gitignored)
+├── find_dups_cp/          # C++ implementation
+│   └── find_dups.cpp
+├── find_dups_js/          # JavaScript implementation
+│   └── find_dups.js
+└── find_dups_pthon/       # Python implementation
+    └── find_dups.py
+```
 
 ## License
 

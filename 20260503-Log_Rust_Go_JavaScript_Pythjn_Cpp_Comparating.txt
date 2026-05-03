@@ -1,0 +1,127 @@
+./find_dups_go/find_dups /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... 6302 files, 2.3 GB scanned...Collecting files... found 32822 files, 13.6 GB
+Parallel hashing 20120 files (workers: 12)...
+[================================>       ] 81.0% (16304/20120 files) ETA: 1s[========================================] 100.0% (20120/20120 files) Completed in 5s
+Hashing completed in 5.9725432s
+
+--- File Type Analytics ---
+  archive        282 files, 14 duplicates
+  binary         228 files, 2 duplicates
+  config         736 files, 105 duplicates
+  data            88 files, 3 duplicates
+  docs          7465 files, 432 duplicates
+  firmware        39 files, 1 duplicates
+  font           195 files, 2 duplicates
+  ide            215 files, 48 duplicates
+  image         3587 files, 82 duplicates
+  media           30 files, 0 duplicates
+  other         6819 files, 677 duplicates
+  source       13138 files, 1263 duplicates
+Analytics written to analytics_go.json
+
+Files scanned: 32822
+Duplicates found (files to delete): 2629
+Runtime:
+  - 16.094 seconds
+  - 00:00:16.094
+Reports: duplicates_go.csv, sort_dup_go.csv, analytics_go.json
+Delete script: duprm_go.sh
+./find_dups_cp/find_dups_cpp /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+Warning: filesystem error: in recursive_directory_iterator: No such file or directory ["/Volumes/ADATA_SE760/Docs"]
+Collecting files... found 32822 files, 13.6 GB
+Parallel hashing 20120 files (workers: 12)...
+[>                                       ] 0.0% (0/12 chunks) ETA: 0s[========================================] 100.0% (12/12 chunks) Completed in 5s
+Hashing completed in 5.0 seconds
+
+--- File Type Analytics ---
+  media     : 30 files, 0 duplicates
+  font      : 195 files, 2 duplicates
+  archive   : 282 files, 14 duplicates
+  ide       : 96 files, 0 duplicates
+  data      : 88 files, 3 duplicates
+  config    : 736 files, 105 duplicates
+  image     : 3587 files, 82 duplicates
+  binary    : 228 files, 2 duplicates
+  docs      : 7465 files, 427 duplicates
+  firmware  : 39 files, 1 duplicates
+  source    : 13138 files, 1263 duplicates
+  other     : 6938 files, 730 duplicates
+Analytics written to analytics_cpp.json
+
+Files scanned: 32822
+Duplicates found (files to delete): 2629
+Runtime:
+  - 10.426 seconds
+  - 00:00:10.425
+Reports: duplicates_cpp.csv, sort_dup_cpp.csv, analytics_cpp.json
+Delete script: duprm_cpp.sh
+node find_dups_js/find_dups.js /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... Warning: directory /Volumes/ADATA_SE760/Docs inaccessible: ENOENT: no such file or directory, access '/Volumes/ADATA_SE760/Docs'
+Collecting files... found 32822 files, 13.6 GB
+found 32822 files
+Parallel hashing 20120 files (workers: 12)...
+[====================================>   ] 91.7% (11/12 chunks) ETA: 0s[========================================] 100.0% (12/12 chunks) Completed in 5s
+Hashing completed in 5.349 seconds
+
+--- File Type Analytics ---
+  docs      : 7465 files, 432 duplicates
+  image     : 3587 files, 82 duplicates
+  other     : 6938 files, 725 duplicates
+  archive   : 282 files, 14 duplicates
+  source    : 13138 files, 1263 duplicates
+  config    : 736 files, 105 duplicates
+  media     : 30 files, 0 duplicates
+  data      : 88 files, 3 duplicates
+  firmware  : 39 files, 1 duplicates
+  binary    : 228 files, 2 duplicates
+  ide       : 96 files, 0 duplicates
+  font      : 195 files, 2 duplicates
+Analytics written to analytics_js.json
+
+Files scanned: 32822
+Duplicates found (files to delete): 2629
+Runtime:
+  - 8.864 seconds
+  - 00:00:08.864
+Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json
+Delete script: duprm_js.sh
+./find_dups_rust/target/release/find_dups /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... found 32822 files, 13.6 GB
+Parallel hashing 20120 files (workers: 12)...
+[>                                       ] 0.0% (0/20120) ETA: 0s
+Hashing completed in 856.452648ms
+
+--- File Type Analytics ---
+  source        13138 files, 1263 duplicates
+  docs           7465 files, 437 duplicates
+  other          6938 files, 720 duplicates
+  image          3587 files, 82 duplicates
+  config          736 files, 105 duplicates
+  archive         282 files, 14 duplicates
+  binary          228 files, 2 duplicates
+  font            195 files, 2 duplicates
+  ide              96 files, 0 duplicates
+  data             88 files, 3 duplicates
+  firmware         39 files, 1 duplicates
+  media            30 files, 0 duplicates
+Analytics written to analytics_rs.json
+
+Files scanned: 32822
+Duplicates found (files to delete): 2629
+Runtime:
+  - 3.026 seconds
+  - 00:00:03.026
+Reports: duplicates_rs.csv, sort_dup_rs.csv, analytics_rs.json
+Delete script: duprm_rs.sh
+./find_dups_pthon/find_dups.py /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+Warning: /Volumes/ADATA_SE760/Docs does not exist
+Traceback (most recent call last):
+  File "/Users/mich/work/Antigravity/github/find_dups/./find_dups_pthon/find_dups.py", line 446, in <module>
+    main()
+  File "/Users/mich/work/Antigravity/github/find_dups/./find_dups_pthon/find_dups.py", line 336, in main
+    all_files = collect_files(roots, collection_progress)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mich/work/Antigravity/github/find_dups/./find_dups_pthon/find_dups.py", line 201, in collect_files
+    progress_tracker.increment()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'CollectionProgressTracker' object has no attribute 'increment'
