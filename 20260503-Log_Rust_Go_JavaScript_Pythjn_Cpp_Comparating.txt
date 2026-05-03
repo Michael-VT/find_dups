@@ -1,142 +1,0 @@
-./find_dups_go/find_dups /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 10370 files, 5.8 GB scanned...Collecting files... 25661 files, 20.3 GB scanned...Collecting files... 37025 files, 21.0 GB scanned...Collecting files... 52049 files, 48.4 GB scanned...Collecting files... found 77313 files, 57.1 GB
-Parallel hashing 54602 files (workers: 12)...
-[===>                                    ] 9.0% (4907/54602 files) ETA: 50s[========>                               ] 20.3% (11065/54602 files) ETA: 39s[==========>                             ] 26.4% (14411/54602 files) ETA: 41s[===============>                        ] 39.6% (21601/54602 files) ETA: 30s[======================>                 ] 56.4% (30800/54602 files) ETA: 19s[============================>           ] 70.5% (38517/54602 files) ETA: 12s[================================>       ] 80.2% (43817/54602 files) ETA: 8s[====================================>   ] 92.5% (50481/54602 files) ETA: 3s[=======================================>] 99.8% (54482/54602 files) ETA: 0s[=======================================>] 100.0% (54593/54602 files) ETA: 0s[========================================] 100.0% (54602/54602 files) Completed in 50s
-Hashing completed in 50.175080814s
-
---- File Type Analytics ---
-  archive        485 files, 14 duplicates
-  binary         241 files, 2 duplicates
-  config        2840 files, 106 duplicates
-  data           166 files, 3 duplicates
-  docs         13465 files, 1873 duplicates
-  firmware       262 files, 1 duplicates
-  font           491 files, 298 duplicates
-  ide            215 files, 48 duplicates
-  image        11074 files, 2229 duplicates
-  media         1148 files, 150 duplicates
-  other        12972 files, 1590 duplicates
-  source       33954 files, 1293 duplicates
-Analytics written to analytics_go.json
-
-Files scanned: 77313
-Duplicates found (files to delete): 7607
-Runtime:
-  - 72.731 seconds
-  - 00:01:12.730
-Reports: duplicates_go.csv, sort_dup_go.csv, analytics_go.json
-Delete script: duprm_go.sh
-./find_dups_cp/find_dups_cpp /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 21554 files, 16.5 GB scanned...Collecting files... 35826 files, 27.1 GB scanned...Collecting files... 52914 files, 48.2 GB scanned...Collecting files... found 77313 files, 57.1 GB
-Parallel hashing 54602 files (workers: 12)...
-[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[===>                                    ] 8.3% (1/12 chunks) ETA: 330s[======>                                 ] 16.7% (2/12 chunks) ETA: 175s[======>                                 ] 16.7% (2/12 chunks) ETA: 200s[================>                       ] 41.7% (5/12 chunks) ETA: 63s[========================================] 100.0% (12/12 chunks) Completed in 50s
-Hashing completed in 50.0 seconds
-
---- File Type Analytics ---
-  ide       : 96 files, 0 duplicates
-  firmware  : 262 files, 1 duplicates
-  source    : 33954 files, 1293 duplicates
-  archive   : 485 files, 14 duplicates
-  font      : 491 files, 298 duplicates
-  image     : 11074 files, 2229 duplicates
-  media     : 1148 files, 150 duplicates
-  other     : 13091 files, 1644 duplicates
-  config    : 2840 files, 106 duplicates
-  data      : 166 files, 3 duplicates
-  binary    : 241 files, 2 duplicates
-  docs      : 13465 files, 1867 duplicates
-Analytics written to analytics_cpp.json
-
-Files scanned: 77313
-Duplicates found (files to delete): 7607
-Runtime:
-  - 70.910 seconds
-  - 00:01:10.909
-Reports: duplicates_cpp.csv, sort_dup_cpp.csv, analytics_cpp.json
-Delete script: duprm_cpp.sh
-node find_dups_js/find_dups.js /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... Collecting files... 18554 files, 15.0 GB scanned...Collecting files... 30398 files, 20.3 GB scanned...Collecting files... 50592 files, 45.8 GB scanned...Collecting files... found 77313 files, 57.1 GB
-found 77313 files
-Parallel hashing 54602 files (workers: 12)...
-[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[>                                       ] 0.0% (0/12 chunks) ETA: 0s[==============================>         ] 75.0% (9/12 chunks) ETA: 13s[=================================>      ] 83.3% (10/12 chunks) ETA: 9s[=================================>      ] 83.3% (10/12 chunks) ETA: 10s[====================================>   ] 91.7% (11/12 chunks) ETA: 5s[====================================>   ] 91.7% (11/12 chunks) ETA: 5s[====================================>   ] 91.7% (11/12 chunks) ETA: 5s[========================================] 100.0% (12/12 chunks) Completed in 67s
-Hashing completed in 67.717 seconds
-
---- File Type Analytics ---
-  docs      : 13465 files, 1873 duplicates
-  other     : 13091 files, 1638 duplicates
-  image     : 11074 files, 2229 duplicates
-  archive   : 485 files, 14 duplicates
-  media     : 1148 files, 150 duplicates
-  config    : 2840 files, 106 duplicates
-  source    : 33954 files, 1293 duplicates
-  data      : 166 files, 3 duplicates
-  firmware  : 262 files, 1 duplicates
-  binary    : 241 files, 2 duplicates
-  font      : 491 files, 298 duplicates
-  ide       : 96 files, 0 duplicates
-Analytics written to analytics_js.json
-
-Files scanned: 77313
-Duplicates found (files to delete): 7607
-Runtime:
-  - 86.064 seconds
-  - 00:01:26.064
-Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json
-Delete script: duprm_js.sh
-./find_dups_rust/target/release/find_dups /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 21318 files, 16.0 GB scanned so far...Collecting files... 33709 files, 27.1 GB scanned so far...Collecting files... 51786 files, 48.2 GB scanned so far...Collecting files... found 77313 files, 57.1 GB
-Parallel hashing 54602 files (workers: 12)...
-[>                                       ] 0.0% (0/54602) ETA: 0s[======>                                 ] 17.3% (9419/54602) ETA: 23s[==========>                             ] 26.4% (14399/54602) ETA: 27s[===============>                        ] 38.8% (21167/54602) ETA: 23s[=================>                      ] 43.6% (23830/54602) ETA: 25s[==================>                     ] 45.5% (24864/54602) ETA: 29s[==================>                     ] 47.1% (25701/54602) ETA: 33s[====================>                   ] 50.3% (27460/54602) ETA: 34s[=========================>              ] 62.6% (34194/54602) ETA: 23s[===========================>            ] 69.4% (37904/54602) ETA: 19s[=================================>      ] 84.9% (46358/54602) ETA: 8s[======================================> ] 96.9% (52926/54602) ETA: 1s[=======================================>] 100.0% (54600/54602) ETA: 0s
-Hashing completed in 60.073471582s
-
---- File Type Analytics ---
-  source        33954 files, 1293 duplicates
-  docs          13465 files, 1877 duplicates
-  other         13091 files, 1634 duplicates
-  image         11074 files, 2229 duplicates
-  config         2840 files, 106 duplicates
-  media          1148 files, 150 duplicates
-  font            491 files, 298 duplicates
-  archive         485 files, 14 duplicates
-  firmware        262 files, 1 duplicates
-  binary          241 files, 2 duplicates
-  data            166 files, 3 duplicates
-  ide              96 files, 0 duplicates
-Analytics written to analytics_rs.json
-
-Files scanned: 77313
-Duplicates found (files to delete): 7607
-Runtime:
-  - 77.811 seconds
-  - 00:01:17.811
-Reports: duplicates_rs.csv, sort_dup_rs.csv, analytics_rs.json
-Delete script: duprm_rs.sh
-./find_dups_pthon/find_dups.py /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
-Collecting files... 15390 files, 26.1 GB scanned...Collecting files... 28120 files, 36.0 GB scanned...Collecting files... 41712 files, 46.5 GB scanned...Collecting files... found 72326 files, 57.1 GB
-Collecting files... found 77313 files, 57.1 GB
-Parallel hashing 54602 files (workers: 12)...
-[>                                       ] 0.0% (0/49 chunks) ETA: 0s[==>                                     ] 6.1% (3/49 chunks) ETA: 76s[==>                                     ] 6.1% (3/49 chunks) ETA: 153s[==>                                     ] 6.1% (3/49 chunks) ETA: 230s[==>                                     ] 6.1% (3/49 chunks) ETA: 306s[==>                                     ] 6.1% (3/49 chunks) ETA: 383s[===>                                    ] 8.2% (4/49 chunks) ETA: 337s[====>                                   ] 12.2% (6/49 chunks) ETA: 251s[========>                               ] 20.4% (10/49 chunks) ETA: 156s[=============>                          ] 32.7% (16/49 chunks) ETA: 92s[===========================>            ] 69.4% (34/49 chunks) ETA: 22s[===================================>    ] 89.8% (44/49 chunks) ETA: 6s[========================================] 100.0% (49/49 chunks) Completed in 59s
-Hashing completed in 60.037 seconds
-
---- File Type Analytics ---
-  archive         485 files, 14 duplicates
-  binary          241 files, 2 duplicates
-  config         2840 files, 106 duplicates
-  data            166 files, 3 duplicates
-  docs          13465 files, 1878 duplicates
-  firmware        262 files, 1 duplicates
-  font            491 files, 298 duplicates
-  ide             215 files, 48 duplicates
-  image         11074 files, 2229 duplicates
-  media          1148 files, 150 duplicates
-  other         12972 files, 1585 duplicates
-  source        33954 files, 1293 duplicates
-Analytics written to analytics_py.json
-
-Files scanned: 77313
-Duplicates found (files to delete): 7607
-Runtime:
-  - 82.115 seconds
-  - 00:01:22.114
-Reports: duplicates_py.csv, sort_dup_py.csv, analytics_py.json
-Delete script: duprm_py.sh

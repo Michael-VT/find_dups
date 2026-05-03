@@ -68,7 +68,7 @@ var categoryMap = map[string]string{
 	".ld": "data", ".icf": "data", ".srec": "data",
 }
 
-// ProgressTracker tracks and displays progress every 5 seconds
+// ProgressTracker tracks and displays file-based progress every 1 second with spinner animation
 type ProgressTracker struct {
 	total      int64
 	processed  int64
@@ -88,7 +88,9 @@ func NewProgressTracker(total int, itemName string) *ProgressTracker {
 }
 
 func (pt *ProgressTracker) Start() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	spinners := []string{"|", "/", "-", "\\"}
+	spinIdx := 0
 	go func() {
 		for {
 			select {
@@ -97,18 +99,9 @@ func (pt *ProgressTracker) Start() {
 				if current >= pt.total {
 					return
 				}
-				percentage := float64(current) / float64(pt.total) * 100.0
-				elapsed := int(time.Since(pt.startTime).Seconds())
-				var eta int
-				if current > 0 {
-					eta = int(float64(elapsed) / float64(current) * float64(pt.total-current))
-				} else {
-					eta = 0
-				}
-				barLength := 40
-				filled := int(int64(barLength) * current / pt.total)
-				bar := strings.Repeat("=", filled) + ">" + strings.Repeat(" ", barLength-filled-1)
-				fmt.Printf("\r[%s] %.1f%% (%d/%d %s) ETA: %ds", bar, percentage, current, pt.total, pt.itemName, eta)
+				spinChar := spinners[spinIdx]
+				spinIdx = (spinIdx + 1) % len(spinners)
+				fmt.Printf("\n\rHashing: %d/%d files %s", current, pt.total, spinChar)
 			case <-pt.stopChan:
 				return
 			}
@@ -121,9 +114,8 @@ func (pt *ProgressTracker) Increment() {
 }
 
 func (pt *ProgressTracker) Stop() {
-	close(pt.stopChan)
-	elapsed := int(time.Since(pt.startTime).Seconds())
-	fmt.Printf("\r[%s] 100.0%% (%d/%d %s) Completed in %ds\n", strings.Repeat("=", 40), pt.total, pt.total, pt.itemName, elapsed)
+    close(pt.stopChan)
+    fmt.Printf("\rHashing: %d/%d files \u2588\n", pt.total, pt.total)
 }
 
 func getCategory(ext string) string {

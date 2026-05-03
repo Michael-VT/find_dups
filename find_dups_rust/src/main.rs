@@ -40,62 +40,46 @@ const BUFFER_SIZE: usize = 65536;
 struct ProgressTracker {
     total: usize,
     processed: Arc<AtomicUsize>,
-    item_name: String,
 }
 
 impl ProgressTracker {
-    fn new(total: usize, item_name: &str) -> Self {
+    fn new(total: usize) -> Self {
         Self {
             total,
             processed: Arc::new(AtomicUsize::new(0)),
-            item_name: item_name.to_string(),
         }
     }
 
     fn start(&self) {
         let processed = Arc::clone(&self.processed);
         let total = self.total;
-        let item_name = self.item_name.clone();
-        let start_time = std::time::Instant::now();
 
         thread::spawn(move || {
+            let spinners = ['|', '/', '-', '\\'];
+            let mut spinner_idx = 0;
+            
             loop {
                 let current = processed.load(Ordering::Relaxed);
                 if current >= total {
+                    // Print final status before exiting
+                    print!("\rHashing: {}/{} files {}\n", current, total, spinners[spinner_idx]);
+                    use std::io::Write;
+                    std::io::stdout().flush().ok();
                     break;
                 }
 
-                let percentage = (current as f64 / total as f64) * 100.0;
-                let elapsed = start_time.elapsed().as_secs();
-                let eta = if current > 0 {
-                    (elapsed * (total - current) as u64) / current as u64
-                } else {
-                    0
-                };
-
-                let bar_length = 40;
-                let filled = (bar_length * current) / total;
-                let bar: String = "=".repeat(filled)
-                    + if filled < bar_length { ">" } else { "" }
-                    + &" ".repeat(bar_length - filled - 1);
-
-                print!("\r[{}] {:.1}% ({}/{}) ETA: {}s",
-                    bar, percentage, current, total, eta);
+                print!("\n\rHashing: {}/{} files {}", current, total, spinners[spinner_idx]);
                 use std::io::Write;
                 std::io::stdout().flush().ok();
 
-                thread::sleep(Duration::from_secs(5));
+                spinner_idx = (spinner_idx + 1) % spinners.len();
+                thread::sleep(Duration::from_secs(1));
             }
         });
     }
 
     fn increment(&self) {
         self.processed.fetch_add(1, Ordering::Relaxed);
-    }
-
-    fn stop(&self) {
-        let elapsed = std::time::Instant::now();
-        // The final status will be shown when the main thread prints the completion message
     }
 }
 
@@ -346,7 +330,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let count = counter_clone.load(Ordering::Relaxed);
             let bytes = bytes_clone.load(Ordering::Relaxed) as u64;
             if count > 0 {
-                print!("\rCollecting files... {} files, {} scanned so far...", count, format_bytes(bytes));
+                print!("\n\rCollecting files... {} files, {} scanned so far...", count, format_bytes(bytes));
                 use std::io::Write;
                 std::io::stdout().flush().ok();
             }
@@ -421,7 +405,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start_hash = std::time::Instant::now();
 
         // Start progress tracker
-        let progress = ProgressTracker::new(total_to_hash, "files");
+        let progress = ProgressTracker::new(total_to_hash);
         progress.start();
 
         let hashes: Vec<(usize, String)> = files_to_hash
@@ -436,7 +420,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
             .collect();
 
-        progress.stop();
 
         for (idx, hash) in hashes {
             all_files[idx].hash = hash;

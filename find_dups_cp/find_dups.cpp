@@ -362,6 +362,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: find_dups_cpp <dir1> [<dir2> ...]" << std::endl;
         return 1;
     }
+    
+    // Suppress filesystem warnings on macOS by redirecting stderr to /dev/null
+    freopen("/dev/null", "w", stderr);
 
     std::vector<Path> roots;
     for (int i = 1; i < argc; ++i) roots.emplace_back(argv[i]);
@@ -373,14 +376,13 @@ int main(int argc, char* argv[]) {
     
     // Start file collection progress indicator
     std::atomic<bool> stop_flag(false);
-    std::atomic<bool> stop_flag(false);
     std::atomic<bool> first_output(true);
     std::thread progress_thread([&]() {
         while (!stop_flag.load()) {
             uint64_t count = scanned.load();
             uint64_t bytes = total_bytes.load();
             if (count > 0) {
-                std::cout << "\rCollecting files... " << count << " files, " << formatSize(bytes) << " scanned..." << std::flush;
+                std::cout << "\n\rCollecting files... " << count << " files, " << formatSize(bytes) << " scanned..." << std::flush;
             }
             // Sleep for 5 seconds, but not on first iteration
             if (!first_output.exchange(false)) {
@@ -411,11 +413,30 @@ int main(int argc, char* argv[]) {
                   << " files (workers: " << NUM_WORKERS << ")..." << std::endl;
         auto start_hash = std::chrono::steady_clock::now();
 
-        auto hash_worker = [](std::vector<FileInfo*>* chunk, ProgressTracker* prog) {
+        // Atomic counter for file-based progress tracking
+        std::atomic<size_t> files_hashed(0);
+        std::atomic<bool> hash_stop_flag(false);
+        
+        // Timer thread for progress display with spinner animation
+        std::thread hash_progress_thread([&]() {
+            const char spinner[] = {'|', '/', '-', '\\'};
+            size_t spinner_idx = 0;
+            
+            while (!hash_stop_flag.load()) {
+                size_t current = files_hashed.load(std::memory_order_relaxed);
+                std::cout << "\n\rHashing: " << current << "/" << files_to_hash.size()
+                          << " files " << spinner[spinner_idx] << std::flush;
+                          << " files " << spinner[spinner_idx] << std::flush;
+                spinner_idx = (spinner_idx + 1) % 4;
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+        });
+
+        auto hash_worker = [](std::vector<FileInfo*>* chunk, std::atomic<size_t>* counter) {
             for (auto* f : *chunk) {
                 f->hash = compute_sha256(f->path);
+                counter->fetch_add(1, std::memory_order_relaxed);
             }
-            prog->increment();
         };
 
         size_t chunk_size = (files_to_hash.size() + NUM_WORKERS - 1) / NUM_WORKERS;
@@ -425,17 +446,20 @@ int main(int argc, char* argv[]) {
                                 files_to_hash.begin() + std::min(i + chunk_size, files_to_hash.size()));
         }
 
-        // Start progress tracker
-        ProgressTracker progress(chunks.size(), "chunks");
-        progress.start();
-
         std::vector<std::future<void>> futures;
         for (auto& chunk : chunks) {
-            futures.push_back(std::async(std::launch::async, hash_worker, &chunk, &progress));
+            futures.push_back(std::async(std::launch::async, hash_worker, &chunk, &files_hashed));
         }
         for (auto& f : futures) f.get();
 
-        progress.stop();
+        // Stop the progress display thread
+        hash_stop_flag.store(true, std::memory_order_release);
+        if (hash_progress_thread.joinable()) {
+            hash_progress_thread.join();
+        }
+        std::cout << "\rHashing: " << files_hashed.load() << "/" << files_to_hash.size()
+                  << " files " << std::endl;
+        
         auto end_hash = std::chrono::steady_clock::now();
         std::chrono::duration<double> hash_elapsed = end_hash - start_hash;
         std::cout << "Hashing completed in " << hash_elapsed.count() << " seconds" << std::endl;

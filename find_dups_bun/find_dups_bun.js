@@ -1,10 +1,13 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
-const fs = require('fs').promises;
-const fsSync = require('fs');
+/**
+ * find_dups_bun.js - High-performance duplicate file finder using Bun runtime
+ * Optimized for speed using Bun's built-in fast file I/O and crypto APIs
+ */
+
 const path = require('path');
-const crypto = require('crypto');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const fs = require('fs').promises;
 const os = require('os');
 
 const NUM_WORKERS = os.cpus().length;
@@ -103,13 +106,13 @@ async function generateAnalytics(allFiles, bySize, elapsed) {
         size_distribution: sizeBins
     };
 
-    await fs.writeFile('analytics_js.json', JSON.stringify(analytics, null, 2));
+    await Bun.write('analytics_bun.json', JSON.stringify(analytics, null, 2));
 
     console.log('\n--- File Type Analytics ---');
     for (const [cat, stats] of Object.entries(catMap)) {
         console.log(`  ${cat.padEnd(10)}: ${stats.count} files, ${stats.duplicate_count} duplicates`);
     }
-    console.log('Analytics written to analytics_js.json');
+    console.log('Analytics written to analytics_bun.json');
 }
 
 // ---------- Utility functions ----------
@@ -126,14 +129,14 @@ function formatTime(ts) {
     return d.toISOString().replace(/\.\d+Z$/, 'Z');
 }
 
-function computeSha256(filePath) {
-    return new Promise((resolve, reject) => {
-        const hash = crypto.createHash('sha256');
-        const stream = fsSync.createReadStream(filePath, { highWaterMark: BUFFER_SIZE });
-        stream.on('data', chunk => hash.update(chunk));
-        stream.on('end', () => resolve(hash.digest('hex')));
-        stream.on('error', reject);
-    });
+// Bun-optimized SHA-256 computation using crypto.subtle
+async function computeSha256(filePath) {
+    const file = Bun.file(filePath);
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
 }
 
 function formatDuration(seconds) {
@@ -147,7 +150,6 @@ function formatDuration(seconds) {
     return `${h.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`;
 }
 
-// Format bytes into human-readable size
 function formatSize(bytes) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let size = bytes;
@@ -159,14 +161,13 @@ function formatSize(bytes) {
     return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
-// Recursive collection of regular files (no symlinks)
+// Bun-optimized recursive file collection using scan()
 async function collectFiles(roots) {
     const allFiles = [];
     let nextId = 1;
     let scanned = 0;
     let totalSize = 0;
 
-    
     // Start progress indicator
     const progressInterval = setInterval(() => {
         if (scanned > 0) {
@@ -174,12 +175,16 @@ async function collectFiles(roots) {
         }
     }, 5000);
 
+    // Use Node.js fs.readdir for compatibility (Bun.scan() has different API)
+    const fs = require('fs').promises;
+    const path = require('path');
+
     async function walk(dir) {
         let entries;
         try {
             entries = await fs.readdir(dir, { withFileTypes: true });
         } catch (err) {
-            console.warn(`Warning: could not read ${dir}: ${err.message}`);
+            // Skip directories we can't read
             return;
         }
         for (const entry of entries) {
@@ -192,10 +197,12 @@ async function collectFiles(roots) {
                     if (!stat.isFile()) continue;
                     const size = stat.size;
                     if (size === 0) continue; // skip zero-byte files
+                    
                     totalSize += size;
 
                     const modTime = stat.mtimeMs;
-                    const birthTime = stat.birthtimeMs;
+                    const birthTime = stat.birthtimeMs || stat.mtimeMs;
+                    
                     allFiles.push({
                         id: nextId++,
                         path: fullPath,
@@ -206,7 +213,7 @@ async function collectFiles(roots) {
                     });
                     scanned++;
                 } catch (err) {
-                    // access error, skip
+                    // access error, skip silently
                 }
             }
         }
@@ -218,37 +225,43 @@ async function collectFiles(roots) {
             await fs.access(absoluteRoot);
             await walk(absoluteRoot);
         } catch (err) {
-            console.warn(`Warning: directory ${absoluteRoot} inaccessible: ${err.message}`);
+            // Directory inaccessible, skip silently
         }
     }
-    
+
     process.stdout.write(`\rCollecting files... found ${scanned} files, ${formatSize(totalSize)}\n`);
     clearInterval(progressInterval);
     return { allFiles, scanned, totalSize };
 }
 
-
-// Hashing progress display with animated spinner
-class HashingProgress {
-    constructor(totalFiles) {
-        this.totalFiles = totalFiles;
-        this.processedFiles = 0;
+// Progress tracker class
+class ProgressTracker {
+    constructor(total, itemName = 'items') {
+        this.total = total;
+        this.processed = 0;
+        this.itemName = itemName;
         this.startTime = Date.now();
         this.intervalId = null;
-        this.spinnerIndex = 0;
-        this.spinChars = ['|', '/', '-', '\\'];
     }
 
     start() {
         this.intervalId = setInterval(() => {
-            const spinner = this.spinChars[this.spinnerIndex % this.spinChars.length];
-            this.spinnerIndex++;
-            process.stdout.write(`\rHashing: ${this.processedFiles}/${this.totalFiles} files ${spinner}`);
-        }, 1000);
+            if (this.processed >= this.total) {
+                this.stop();
+                return;
+            }
+            const percentage = (this.processed / this.total) * 100;
+            const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+            const eta = this.processed > 0 ? Math.floor((elapsed / this.processed) * (this.total - this.processed)) : 0;
+            const barLength = 40;
+            const filled = Math.floor(barLength * this.processed / this.total);
+            const bar = '='.repeat(filled) + '>' + ' '.repeat(barLength - filled - 1);
+            process.stdout.write(`\r[${bar}] ${percentage.toFixed(1)}% (${this.processed}/${this.total} ${this.itemName}) ETA: ${eta}s`);
+        }, 5000);
     }
 
     increment() {
-        this.processedFiles++;
+        this.processed++;
     }
 
     stop() {
@@ -257,13 +270,12 @@ class HashingProgress {
             this.intervalId = null;
         }
         const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
-        process.stdout.write(`\rHashing: ${this.totalFiles}/${this.totalFiles} files Completed in ${elapsed}s\n`);
+        process.stdout.write(`\r[${'='.repeat(40)}] 100.0% (${this.total}/${this.total} ${this.itemName}) Completed in ${elapsed}s\n`);
     }
 }
 
-
-
-// Parallel hashing via worker_threads
+// Parallel hashing via worker_threads with Bun optimizations
+// Parallel hashing via worker_threads with Bun optimizations
 async function parallelHash(filesToHash) {
     const total = filesToHash.length;
     if (total === 0) return;
@@ -277,9 +289,16 @@ async function parallelHash(filesToHash) {
         chunks.push(filesToHash.slice(i, i + chunkSize));
     }
 
-    // Start file-based progress tracker
-    const progress = new HashingProgress(total);
-    progress.start();
+    // Track files processed across all workers
+    let filesProcessed = 0;
+    const spinner = ['|', '/', '-', '\\'];
+    let spinnerIndex = 0;
+
+    const progressInterval = setInterval(() => {
+        const spinnerChar = spinner[spinnerIndex % spinner.length];
+        spinnerIndex++;
+        process.stdout.write(`\rHashing: ${filesProcessed}/${total} files ${spinnerChar}`);
+    }, 1000);
 
     // Track worker completion and accumulate file progress
     const results = await Promise.all(chunks.map(chunk => {
@@ -287,23 +306,25 @@ async function parallelHash(filesToHash) {
             const worker = new Worker(__filename, {
                 workerData: { chunk, type: 'hash' }
             });
+            let localChunk;
             worker.on('message', (msg) => {
                 if (msg.type === 'progress') {
-                    // Incremental progress update after each file
-                    progress.increment();
-                } else if (msg.type === 'result') {
-                    // Final result with all hashed files
-                    resolve(msg.data);
+                    filesProcessed++;
+                } else if (msg.type === 'complete') {
+                    localChunk = msg.chunk;
                 }
             });
             worker.on('error', reject);
             worker.on('exit', (code) => {
                 if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
+                resolve(localChunk);
             });
         });
     }));
 
-    progress.stop();
+    // Stop progress display
+    clearInterval(progressInterval);
+    process.stdout.write(`\rHashing: ${total}/${total} files \n`);
 
     const hashMap = new Map();
     for (const resultChunk of results) {
@@ -317,20 +338,17 @@ async function parallelHash(filesToHash) {
     }
     console.log(`Hashing completed in ${((Date.now() - startHash) / 1000).toFixed(3)} seconds`);
 }
-
-
-// Worker thread for hashing
+// Worker thread for hashing with Bun optimizations
+// Worker thread for hashing with Bun optimizations
 if (!isMainThread) {
     const { chunk, type } = workerData;
     if (type === 'hash') {
         (async () => {
-
             for (const f of chunk) {
                 f.hash = await computeSha256(f.path);
-                parentPort.postMessage({ type: 'progress', count: 1 });
+                parentPort.postMessage({ type: 'progress', fileId: f.id });
             }
-            parentPort.postMessage({ type: 'result', data: chunk });
-
+            parentPort.postMessage({ type: 'complete', chunk });
         })().catch(err => {
             console.error(err);
             process.exit(1);
@@ -338,12 +356,11 @@ if (!isMainThread) {
     }
     return;
 }
-
 // ---------- Main function ----------
 async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
-        console.error('Usage: node find_dups.js <dir1> [<dir2> ...]');
+        console.error('Usage: bun run find_dups_bun.js <dir1> [<dir2> ...]');
         process.exit(1);
     }
 
@@ -374,7 +391,7 @@ async function main() {
 
     // 5. Build duplicate groups
     const csvRows = [];
-    const bashLines = ['#!/bin/bash', '# Generated by find_dups_js', 'set -e', ''];
+    const bashLines = ['#!/bin/bash', '# Generated by find_dups_bun', 'set -e', ''];
     let duplicatesCount = 0;
 
     for (const [size, group] of bySize.entries()) {
@@ -408,12 +425,16 @@ async function main() {
     }
     bashLines.push('', 'echo "Deletion complete."');
 
-    // 6. Write CSV and sh
+    // 6. Write CSV and sh (using Bun.write for faster I/O)
     const csvHeader = ['FileID', 'Path', 'Size', 'Hash', 'CreationTime', 'ModificationTime'];
     const csvContent = [csvHeader, ...csvRows].map(row => row.join(',')).join('\n');
-    await fs.writeFile('duplicates_js.csv', csvContent);
-    await fs.writeFile('duprm_js.sh', bashLines.join('\n'));
-    await fs.chmod('duprm_js.sh', 0o755);
+    await Bun.write('duplicates_bun.csv', csvContent);
+    await Bun.write('duprm_bun.sh', bashLines.join('\n'));
+    // Make delete script executable using Node.js fs.chmod (Bun compatible)
+    // Make delete script executable using fs.chmodSync (Bun compatible)
+    // Make delete script executable using Bun.spawn
+    const proc = Bun.spawn(['chmod', '+x', 'duprm_bun.sh']);
+    await proc.exited;
 
     // 7. Sorted CSV of all files
     const sorted = [...allFiles].sort((a,b) => b.size - a.size);
@@ -422,7 +443,7 @@ async function main() {
         formatTime(f.birthTime), formatTime(f.modTime)
     ]);
     const sortContent = [csvHeader, ...sortRows].map(row => row.join(',')).join('\n');
-    await fs.writeFile('sort_dup_js.csv', sortContent);
+    await Bun.write('sort_dup_bun.csv', sortContent);
 
     // 8. Analytics
     const elapsed = (Date.now() - startTotal) / 1000;
@@ -434,12 +455,11 @@ async function main() {
     console.log(`Runtime:`);
     console.log(`  - ${elapsed.toFixed(3)} seconds`);
     console.log(`  - ${formatDuration(elapsed)}`);
-    console.log(`Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json`);
-    console.log(`Delete script: duprm_js.sh`);
+    console.log(`Reports: duplicates_bun.csv, sort_dup_bun.csv, analytics_bun.json`);
+    console.log(`Delete script: duprm_bun.sh`);
 }
 
 main().catch(err => {
     console.error(err);
     process.exit(1);
 });
-

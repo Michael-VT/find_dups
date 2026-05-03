@@ -1,10 +1,10 @@
 # find_dups: Cross-Language Duplicate File Finder
 
-![Language Count](https://img.shields.io/badge/implementations-5-blue)
+![Language Count](https://img.shields.io/badge/implementations-6-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![Algorithm](https://img.shields.io/badge/algorithm-SHA--256-green)
 
-A high-performance duplicate file finder implemented in **Go**, **Python**, **Rust**, **JavaScript**, and **C++** with identical algorithms for fair performance comparison and production use.
+A high-performance duplicate file finder implemented in **Go**, **Python**, **Rust**, **JavaScript**, **Bun**, and **C++** with identical algorithms for fair performance comparison and production use.
 
 ## Overview
 

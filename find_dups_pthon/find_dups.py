@@ -7,61 +7,76 @@ import hashlib
 import csv
 import json
 import time
-from multiprocessing import Pool, cpu_count, Value
+from multiprocessing import Pool, cpu_count, Value, Queue
+# Global progress queue for workers (initialized in each worker process)
+_progress_queue = None
+
+def init_worker(progress_queue):
+    """Initializer function to set global progress_queue in worker process."""
+    global _progress_queue
+    _progress_queue = progress_queue
+import functools
 from collections import defaultdict
 import threading
 import queue
 BUFFER_SIZE = 64 * 1024
 NUM_WORKERS = cpu_count()
 
-class ProgressTracker:
-    """Thread-safe progress tracker that displays progress every 5 seconds."""
-    def __init__(self, total_items, item_name="files"):
-        self.total_items = total_items
-        self.processed = 0
-        self.item_name = item_name
+class HashingProgressTracker:
+    """Thread-safe file-based progress tracker for hashing phase."""
+    def __init__(self, total_files):
+        self.total_files = total_files
+        self.processed_files = 0
         self.lock = threading.Lock()
-        self.start_time = time.time()
         self.stop_event = threading.Event()
         self.thread = None
+        self.progress_queue = None  # Will be set before start
 
     def _progress_reporter(self):
-        """Background thread that reports progress every 5 seconds."""
+        """Background thread that updates display every 1 second with spinner animation."""
+        spinner_chars = ['|', '/', '-', '\\']
+        spinner_idx = 0
         while not self.stop_event.is_set():
-            with self.lock:
-                if self.processed >= self.total_items:
+            # Drain the queue and accumulate processed file count
+            while True:
+                try:
+                    count = self.progress_queue.get_nowait()
+                    with self.lock:
+                        self.processed_files += count
+                except queue.Empty:
                     break
-                percentage = (self.processed / self.total_items) * 100
-                elapsed = time.time() - self.start_time
-                if self.processed > 0:
-                    eta = (elapsed / self.processed) * (self.total_items - self.processed)
-                else:
-                    eta = 0
-                bar_length = 40
-                filled = int(bar_length * self.processed / self.total_items)
-                bar = '=' * filled + '>' + ' ' * (bar_length - filled - 1)
-                print(f"\r[{bar}] {percentage:.1f}% ({self.processed}/{self.total_items} {self.item_name}) ETA: {int(eta)}s", end='', flush=True)
+            
+            # Display progress with spinner
+            with self.lock:
+                current = self.processed_files
+                if current >= self.total_files:
+                    break
+            
+            spinner = spinner_chars[spinner_idx]
+            spinner_idx = (spinner_idx + 1) % len(spinner_chars)
+            print(f"\rHashing: {current}/{self.total_files} files {spinner}", end='', flush=True)
+            
+            # Wait 1 second (but check stop_event frequently)
+            cycle_start = time.time()
+            while time.time() - cycle_start < 1.0:
+                if self.stop_event.is_set():
+                    break
+                time.sleep(0.1)
 
-            self.stop_event.wait(5)
-
-    def start(self):
+    def start(self, progress_queue):
         """Start the progress reporter thread."""
-        if self.total_items > 0:
+        self.progress_queue = progress_queue
+        if self.total_files > 0:
             self.thread = threading.Thread(target=self._progress_reporter, daemon=True)
             self.thread.start()
-
-    def increment(self, amount=1):
-        """Increment the processed count."""
-        with self.lock:
-            self.processed += amount
 
     def stop(self):
         """Stop the progress reporter and show final status."""
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1)
-        elapsed = time.time() - self.start_time
-        print(f"\r[{'=' * 40}] 100.0% ({self.total_items}/{self.total_items} {self.item_name}) Completed in {int(elapsed)}s")
+            self.thread.join(timeout=2)
+        print(f"\rHashing: {self.total_files}/{self.total_files} files ✓")
+
 def is_regular_file(path):
     try:
         st = os.lstat(path)
@@ -217,6 +232,17 @@ def parallel_hash_chunk(chunk):
     for f in chunk:
         f['hash'] = compute_sha256((f['path'], None))
         results.append((f['id'], f['hash']))
+        # Send progress update after each file
+        if _progress_queue is not None:
+            _progress_queue.put(1)
+    return results
+    results = []
+    for f in chunk:
+        f['hash'] = compute_sha256((f['path'], None))
+        results.append((f['id'], f['hash']))
+        # Send progress update after each file
+        if progress_queue is not None:
+            progress_queue.put(1)
     return results
 
 def format_duration(seconds):
@@ -360,21 +386,19 @@ def main():
 
         chunk_size = max(1, total_to_hash // (NUM_WORKERS * 4))
         chunks = [files_to_hash[i:i+chunk_size] for i in range(0, total_to_hash, chunk_size)]
-        total_chunks = len(chunks)
 
-        # Start progress tracker
-        progress = ProgressTracker(total_chunks, "chunks")
-        progress.start()
+        # Create progress queue and start file-based progress tracker
+        progress_queue = Queue()
+        progress = HashingProgressTracker(total_to_hash)
+        progress.start(progress_queue)
 
-        # Use imap_unordered to get results as they complete
+        # Use imap_unordered with initializer to pass queue to workers
         hash_map = {}
-        with Pool(NUM_WORKERS) as pool:
+        with Pool(NUM_WORKERS, initializer=init_worker, initargs=(progress_queue,)) as pool:
             for chunk_result in pool.imap_unordered(parallel_hash_chunk, chunks):
                 # Apply hashes from this chunk
                 for fid, fhash in chunk_result:
                     hash_map[fid] = fhash
-                # Update progress
-                progress.increment()
 
         # Stop progress tracker
         progress.stop()
