@@ -137,42 +137,86 @@ Hash compute_sha256(const Path& path) {
     return oss.str();
 }
 
+void walk_directory(const Path& dir, std::vector<FileInfo>& files, uint64_t& next_id,
+                    std::atomic<uint64_t>& scanned, std::atomic<uint64_t>& total_bytes) {
+    // Check if directory exists and is accessible BEFORE creating iterator
+    std::error_code ec;
+    auto dir_status = fs::status(dir, ec);
+    if (ec) {
+        // Directory not accessible, skip silently
+        return;
+    }
+    if (!fs::is_directory(dir_status)) {
+        return;
+    }
+
+    // Skip known system directories that always cause permission errors
+    std::string dir_str = dir.string();
+    static const std::vector<std::string> skipped_dirs = {
+        ".Spotlight-V100", ".TemporaryItems", ".Trashes",
+        ".fseventsd", ".MobileBackups", ".DocumentRevisions-V100"
+    };
+    for (const auto& skip : skipped_dirs) {
+        if (dir_str.find("/" + skip) != std::string::npos) {
+            return;  // Skip known system directories silently
+        }
+    }
+
+    try {
+        for (auto& entry : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied)) {
+            if (entry.is_symlink()) continue;
+
+            auto path = entry.path();
+
+            if (entry.is_directory()) {
+                walk_directory(path, files, next_id, scanned, total_bytes);
+            } else if (entry.is_regular_file()) {
+                try {
+                    auto size = entry.file_size();
+                    if (size == 0) continue; // skip zero-byte files
+
+                    auto mod_time = entry.last_write_time();
+                    auto sys_mtime = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                                        mod_time - fs::file_time_type::clock::now() +
+                                        std::chrono::system_clock::now());
+
+                    struct stat stat_buf;
+                    if (lstat(path.c_str(), &stat_buf) == 0) {
+                        auto birth = std::chrono::system_clock::from_time_t(stat_buf.st_birthtime);
+                        files.push_back({next_id++, path, size, sys_mtime, birth, ""});
+                    } else {
+                        files.push_back({next_id++, path, size, sys_mtime, sys_mtime, ""});
+                    }
+                    scanned++;
+                    total_bytes += size;
+                } catch (const std::exception& e) {
+                    // Skip files that can't be accessed
+                }
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        // Show warning for directories we can't iterate
+        std::cerr << "Warning: could not read " << dir << ": " << e.what() << std::endl;
+    }
+}
+
 std::vector<FileInfo> collect_files(const std::vector<Path>& roots, std::atomic<uint64_t>& scanned, std::atomic<uint64_t>& total_bytes) {
     std::vector<FileInfo> files;
     uint64_t next_id = 1;
 
     for (const auto& root : roots) {
         try {
-            for (auto& entry : fs::recursive_directory_iterator(root,
-                            fs::directory_options::skip_permission_denied)) {
-                if (entry.is_symlink()) continue;
-                if (!entry.is_regular_file()) continue;
-
-                auto path = entry.path();
-                auto size = entry.file_size();
-                if (size == 0) continue; // skip zero-byte files
-
-                auto mod_time = entry.last_write_time();
-                auto sys_mtime = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                                    mod_time - fs::file_time_type::clock::now() +
-                                    std::chrono::system_clock::now());
-
-                struct stat stat_buf;
-                if (stat(path.c_str(), &stat_buf) == 0) {
-                    auto birth = std::chrono::system_clock::from_time_t(stat_buf.st_birthtime);
-                    files.push_back({next_id++, path, size, sys_mtime, birth, ""});
-                } else {
-                    files.push_back({next_id++, path, size, sys_mtime, sys_mtime, ""});
-                }
-                scanned++;
-                total_bytes += size;
+            if (!fs::exists(root)) {
+                std::cerr << "Warning: directory " << root << " does not exist" << std::endl;
+                continue;
             }
+            walk_directory(root, files, next_id, scanned, total_bytes);
         } catch (const fs::filesystem_error& e) {
+            std::cerr << "Warning: directory " << root << " inaccessible: " << e.what() << std::endl;
         }
     }
     return files;
 }
-
 std::unordered_map<uint64_t, std::vector<FileInfo*>> group_by_size(std::vector<FileInfo>& files) {
     std::unordered_map<uint64_t, std::vector<FileInfo*>> groups;
     for (auto& f : files) {
@@ -362,10 +406,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: find_dups_cpp <dir1> [<dir2> ...]" << std::endl;
         return 1;
     }
-    
-    // Suppress filesystem warnings on macOS by redirecting stderr to /dev/null
-    freopen("/dev/null", "w", stderr);
-
     std::vector<Path> roots;
     for (int i = 1; i < argc; ++i) roots.emplace_back(argv[i]);
 
@@ -382,7 +422,7 @@ int main(int argc, char* argv[]) {
             uint64_t count = scanned.load();
             uint64_t bytes = total_bytes.load();
             if (count > 0) {
-                std::cout << "\n\rCollecting files... " << count << " files, " << formatSize(bytes) << " scanned..." << std::flush;
+                std::cout << "\rCollecting files... " << count << " files, " << formatSize(bytes) << " scanned..." << std::flush;
             }
             // Sleep for 5 seconds, but not on first iteration
             if (!first_output.exchange(false)) {
@@ -424,8 +464,7 @@ int main(int argc, char* argv[]) {
             
             while (!hash_stop_flag.load()) {
                 size_t current = files_hashed.load(std::memory_order_relaxed);
-                std::cout << "\n\rHashing: " << current << "/" << files_to_hash.size()
-                          << " files " << spinner[spinner_idx] << std::flush;
+                std::cout << "\rHashing: " << current << "/" << files_to_hash.size()
                           << " files " << spinner[spinner_idx] << std::flush;
                 spinner_idx = (spinner_idx + 1) % 4;
                 std::this_thread::sleep_for(std::chrono::seconds(1));

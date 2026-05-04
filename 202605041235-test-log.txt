@@ -1,0 +1,158 @@
+╭─mich at Michs-MacBook-Pro in ~/work/Antigravity/github/find_dups on main✔ 26-05-04 - 3:08:28
+╰─⠠⠵ ./compar-long.sh                    
+./find_dups_go/find_dups_go /Volumes/ADATA_SE760 /Volumes/Transcend /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... found 1018069 files, 1174.7 GBd...
+Parallel hashing 894648 files (workers: 12)...
+[========================================] 100.0% (894648/894648 files) Completed in 3315s
+Hashing completed in 55m15.055560103s
+
+--- File Type Analytics ---
+  archive       2600 files, 241 duplicates
+  binary        9568 files, 1596 duplicates
+  config       48993 files, 3012 duplicates
+  data         11616 files, 900 duplicates
+  docs         114517 files, 22164 duplicates
+  firmware     14110 files, 1194 duplicates
+  font          1256 files, 363 duplicates
+  ide          20141 files, 3730 duplicates
+  image        127152 files, 19158 duplicates
+  media        10845 files, 563 duplicates
+  other        226154 files, 31927 duplicates
+  source       431117 files, 65182 duplicates
+Analytics written to analytics_go.json
+
+Files scanned: 1018069
+Duplicates found (files to delete): 150030
+Runtime:
+  - 4587.187 seconds
+  - 01:16:27.186
+Reports: duplicates_go.csv, sort_dup_go.csv, analytics_go.json
+Delete script: duprm_go.sh
+⠵ find_dups_bun && bun run find_dups_bun.js /Volumes/ADATA_SE760/Docs /Volumes/Transcend/Docs /Users/mich/Downloads/ /Users/mich/Documents
+
+Collecting files... found 76201 files, 56.3 GBed...
+found 76201 files
+Parallel hashing 53960 files (workers: 12)...
+Hashing: 53960/53960 files -
+Hashing completed in 51.944 seconds
+
+--- File Type Analytics ---
+  docs      : 13381 files, 1860 duplicates
+  other     : 12571 files, 1736 duplicates
+  data      : 165 files, 3 duplicates
+  image     : 10910 files, 2220 duplicates
+  media     : 1142 files, 150 duplicates
+  font      : 491 files, 298 duplicates
+  archive   : 479 files, 14 duplicates
+  config    : 2832 files, 105 duplicates
+  source    : 33654 files, 1259 duplicates
+  binary    : 219 files, 2 duplicates
+  firmware  : 262 files, 1 duplicates
+  ide       : 95 files, 0 duplicates
+Analytics written to analytics_bun.json
+
+Files scanned: 76201
+Duplicates found (files to delete): 7648
+Runtime:
+  - 86.486 seconds
+  - 00:01:26.486
+Reports: duplicates_bun.csv, sort_dup_bun.csv, analytics_bun.json
+Delete script: duprm_bun.sh
+node find_dups_js/find_dups.js /Volumes/ADATA_SE760 /Volumes/Transcend /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... Warning: could not read /Volumes/ADATA_SE760/.Spotlight-V100: EPERM: operation not permitted, scandir '/Volumes/ADATA_SE760/.Spotlight-V100'
+Warning: could not read /Volumes/ADATA_SE760/.TemporaryItems: EPERM: operation not permitted, scandir '/Volumes/ADATA_SE760/.TemporaryItems'
+Warning: could not read /Volumes/ADATA_SE760/.Trashes: EPERM: operation not permitted, scandir '/Volumes/ADATA_SE760/.Trashes'
+Collecting files... 743554 files, 777.7 GB scanned...Warning: could not read /Volumes/Transcend/.Spotlight-V100: EPERM: operation not permitted, scandir '/Volumes/Transcend/.Spotlight-V100'
+Warning: could not read /Volumes/Transcend/.TemporaryItems: EPERM: operation not permitted, scandir '/Volumes/Transcend/.TemporaryItems'
+Warning: could not read /Volumes/Transcend/.Trashes: EPERM: operation not permitted, scandir '/Volumes/Transcend/.Trashes'
+Collecting files... found 1018069 files, 1.1 TBed.....
+found 1018069 files
+Parallel hashing 894648 files (workers: 12)...
+Hashing: 894648/894648 files Completed in 4806s
+Hashing completed in 4810.408 seconds
+
+--- File Type Analytics ---
+  other     : 235028 files, 33612 duplicates
+  docs      : 114517 files, 22164 duplicates
+  image     : 127152 files, 19158 duplicates
+  media     : 10845 files, 563 duplicates
+  config    : 48993 files, 3012 duplicates
+  source    : 431117 files, 65182 duplicates
+  binary    : 9568 files, 1596 duplicates
+  archive   : 2600 files, 241 duplicates
+  data      : 11616 files, 900 duplicates
+  firmware  : 14110 files, 1194 duplicates
+  ide       : 11267 files, 2045 duplicates
+  font      : 1256 files, 363 duplicates
+Analytics written to analytics_js.json
+
+Files scanned: 1018069
+Duplicates found (files to delete): 150030
+Runtime:
+  - 9087.544 seconds
+  - 02:31:27.544
+Reports: duplicates_js.csv, sort_dup_js.csv, analytics_js.json
+Delete script: duprm_js.sh
+./find_dups_rust/target/release/find_dups /Volumes/ADATA_SE760 /Volumes/Transcend /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... found 1018070 files, 1.1 TBed so far.....
+Parallel hashing 894649 files (workers: 12)...
+Hashing: 894491/894649 files -
+Hashing completed in 2856.586428474s
+Hashing: 894648/894649 files \
+--- File Type Analytics ---
+  source       431117 files, 65188 duplicates
+  other        235029 files, 33601 duplicates
+  image        127152 files, 19158 duplicates
+  docs         114517 files, 22161 duplicates
+  config        48993 files, 3012 duplicates
+  firmware      14110 files, 1194 duplicates
+  data          11616 files, 900 duplicates
+  ide           11267 files, 2045 duplicates
+  media         10845 files, 563 duplicates
+  binary         9568 files, 1596 duplicates
+  archive        2600 files, 241 duplicates
+  font           1256 files, 363 duplicates
+Analytics written to analytics_rs.json
+
+Files scanned: 1018070
+Duplicates found (files to delete): 150022
+Runtime:
+  - 3993.305 seconds
+  - 01:06:33.304
+Reports: duplicates_rs.csv, sort_dup_rs.csv, analytics_rs.json
+Delete script: duprm_rs.sh
+Hashing: 894648/894649 files |./find_dups_pthon/find_dups.py /Volumes/ADATA_SE760 /Volumes/Transcend /Users/mich/Downloads/ /Users/mich/Documents
+Collecting files... found 999511 files, 1.1 TBed......[[1089;9u
+Collecting files... found 1018222 files, 1.1 TB
+Parallel hashing 894802 files (workers: 12)...
+Hashing: 894802/894802 files ✓
+Hashing completed in 3036.823 seconds
+
+--- File Type Analytics ---
+  archive        2600 files, 241 duplicates
+  binary         9568 files, 1596 duplicates
+  config        48993 files, 3012 duplicates
+  data          11616 files, 900 duplicates
+  docs         114518 files, 22164 duplicates
+  firmware      14110 files, 1194 duplicates
+  font           1256 files, 363 duplicates
+  ide           20141 files, 3730 duplicates
+  image        127152 files, 19158 duplicates
+  media         10845 files, 563 duplicates
+  other        226306 files, 32049 duplicates
+  source       431117 files, 65191 duplicates
+Analytics written to analytics_py.json
+
+Files scanned: 1018222
+Duplicates found (files to delete): 150161
+Runtime:
+  - 4315.711 seconds
+  - 01:11:55.710
+Reports: duplicates_py.csv, sort_dup_py.csv, analytics_py.json
+Delete script: duprm_py.sh
+Collecting files... found 1018225 files, 1.1 TBed.....
+found 1018225 files
+Parallel hashing 894802 files (workers: 12)...
+Hashing: 670333/894802 files |./compar-long.sh: line 11: 13847 Trace/BPT trap: 5       bun run find_dups_bun.js /Volumes/ADATA_SE760 /Volumes/Transcend /Users/mich/Downloads/ /Users/mich/Documents
+./compar-long.sh: line 12: cd: find_dups_bun: No such file or directory
+
